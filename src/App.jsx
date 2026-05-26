@@ -4,7 +4,7 @@ import './styles/App.css';
 import ConversationPanel from './components/ConversationPanel.jsx';
 import AgentDashboard from './components/AgentDashboard.jsx';
 
-import { getSunnaResponse } from './agents/sunna.js';
+import { getSunnaResponse, hasUsableSunnaApiKey } from './agents/sunna.js';
 import { scoreMessage } from './agents/samajhna.js';
 import { routeCase } from './agents/nirdeshak.js';
 import { generateCounsellorBrief } from './agents/setu.js';
@@ -116,7 +116,9 @@ export default function App() {
     setIsSunnaLoading(true);
 
     setAgentStatus('sunna', 'LISTENING');
-    addActivity('Sunna: GPT-4o response requested');
+    addActivity(hasUsableSunnaApiKey()
+      ? 'Sunna: GPT-4o response requested'
+      : 'Sunna: Demo fallback response requested — add API key for GPT-4o');
 
     const sunnaPromise = Promise.all([
       getSunnaResponse(conversationForAgents),

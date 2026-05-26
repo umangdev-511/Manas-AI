@@ -18,8 +18,8 @@ Rules:
   asking one gentle question.
 `;
 
-function hasUsableApiKey() {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+export function hasUsableSunnaApiKey() {
+  const apiKey = import.meta.env?.VITE_OPENAI_API_KEY;
   return apiKey && apiKey !== 'placeholder' && apiKey !== 'your_key_here';
 }
 
@@ -32,18 +32,43 @@ function buildMessages(conversationHistory) {
 
 function getFallbackResponse(userMessage) {
   const crisisPattern = /(suicide|suicidal|want to die|end my life|kill myself|don't want to live|no point living|can't go on|better off dead)/i;
+  const sleepPattern = /(can't sleep|cannot sleep|insomnia|sleep|tired|exhausted|no energy)/i;
+  const anxietyPattern = /(anxious|anxiety|worried|worry|nervous|panic|panicking|out of control|overwhelmed|scared|fear)/i;
+  const isolationPattern = /(alone|lonely|isolated|no one|withdrawn)/i;
+  const hopelessPattern = /(hopeless|worthless|useless|no hope|nothing matters|failure)/i;
+  const interestPattern = /(lost interest|losing interest|no interest|don't enjoy|nothing feels fun)/i;
 
   if (crisisPattern.test(userMessage)) {
     return 'I am really sorry you are carrying this right now. Your safety matters in this moment, and it would be important to reach out to emergency support or someone you trust nearby. Are you somewhere safe right now?';
   }
 
-  return 'I am really sorry it has been feeling this heavy. I am here with you, and you do not have to make sense of everything all at once. What has been the hardest part of today?';
+  if (anxietyPattern.test(userMessage)) {
+    return 'That sounds exhausting, like your mind and body have been on alert for too long. I am here with you while we slow this down a little. When does the anxious feeling usually get strongest?';
+  }
+
+  if (sleepPattern.test(userMessage)) {
+    return 'Not sleeping well can make everything feel heavier and harder to hold. I am sorry you have been going through that. Has this been happening for a few nights, or has it been building for longer?';
+  }
+
+  if (isolationPattern.test(userMessage)) {
+    return 'Feeling alone with this can be really painful. I am glad you said it here instead of keeping it all inside. Is there anyone in your day-to-day life who knows even a little of what you are carrying?';
+  }
+
+  if (hopelessPattern.test(userMessage)) {
+    return 'Hearing that you feel this low matters, and I do not want you to have to sit with it by yourself. I am here with you right now. What has been making things feel most hopeless lately?';
+  }
+
+  if (interestPattern.test(userMessage)) {
+    return 'Losing interest in things that used to matter can feel quietly frightening. I am sorry it has been like that. What is one thing that has started feeling different from before?';
+  }
+
+  return 'I am listening. It sounds like there is a lot under the surface, and you do not have to explain it perfectly. What feels most important for me to understand right now?';
 }
 
 export async function getSunnaResponse(conversationHistory) {
   const latestUserMessage = [...conversationHistory].reverse().find((message) => message.role === 'user');
 
-  if (!hasUsableApiKey()) {
+  if (!hasUsableSunnaApiKey()) {
     return getFallbackResponse(latestUserMessage?.content || '');
   }
 
@@ -51,7 +76,7 @@ export async function getSunnaResponse(conversationHistory) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+      Authorization: `Bearer ${import.meta.env?.VITE_OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
       model: MODEL,
