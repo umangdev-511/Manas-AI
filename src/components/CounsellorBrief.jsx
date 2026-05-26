@@ -25,6 +25,7 @@ export default function CounsellorBrief({ brief = {} }) {
     recommendedOpener = '',
     escalationReason = '',
     timestamp,
+    isPending = false,
   } = brief;
 
   return (
@@ -35,7 +36,7 @@ export default function CounsellorBrief({ brief = {} }) {
           <time>{formatBriefTimestamp(timestamp)}</time>
         </div>
         <span className={`severity-pill severity-pill--${String(severityBadge).toLowerCase().replace(/\s+/g, '-')}`}>
-          {severityBadge}
+          {isPending ? 'GENERATING' : severityBadge}
         </span>
       </header>
 

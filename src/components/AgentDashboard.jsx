@@ -120,8 +120,14 @@ export default function AgentDashboard({
   activityLog = [],
   isEscalated = false,
   counsellorBrief = null,
+  onResetSession,
+  sessionResetKey = 0,
 }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    setElapsedSeconds(0);
+  }, [sessionResetKey]);
 
   useEffect(() => {
     const timerId = window.setInterval(() => {
@@ -136,7 +142,7 @@ export default function AgentDashboard({
     ...agentStatuses,
   };
 
-  const visibleLog = useMemo(() => activityLog.slice(0, 8), [activityLog]);
+  const visibleLog = useMemo(() => activityLog.slice(0, 12), [activityLog]);
   const safePhqScore = clampScore(phqScore, 27);
   const safeGadScore = clampScore(gadScore, 21);
   const riskColor = getRiskColor(riskLevel);
@@ -148,9 +154,14 @@ export default function AgentDashboard({
           <h2>Agent Orchestration</h2>
           <p>Autonomous · Real-time · Silent</p>
         </div>
-        <time className="session-timer" aria-label="Session timer">
-          {formatElapsedTime(elapsedSeconds)}
-        </time>
+        <div className="dashboard-actions">
+          <time className="session-timer" aria-label="Session timer">
+            {formatElapsedTime(elapsedSeconds)}
+          </time>
+          <button className="reset-session-button" type="button" onClick={onResetSession}>
+            Reset
+          </button>
+        </div>
       </header>
 
       {isEscalated && (

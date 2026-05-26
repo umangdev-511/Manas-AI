@@ -3,18 +3,11 @@ import './styles/App.css';
 
 import ConversationPanel from './components/ConversationPanel.jsx';
 import AgentDashboard from './components/AgentDashboard.jsx';
-import AgentNode from './components/AgentNode.jsx';
-import CounsellorBrief from './components/CounsellorBrief.jsx';
 
 import { getSunnaResponse } from './agents/sunna.js';
 import { scoreMessage } from './agents/samajhna.js';
 import { routeCase } from './agents/nirdeshak.js';
 import { generateCounsellorBrief } from './agents/setu.js';
-
-import * as sunnaAgent from './agents/sunna.js';
-import * as samajhnaAgent from './agents/samajhna.js';
-import * as nirdeshakAgent from './agents/nirdeshak.js';
-import * as setuAgent from './agents/setu.js';
 
 const INITIAL_AGENT_STATUSES = {
   sunna: 'STANDBY',
@@ -35,6 +28,34 @@ function buildScoreLog(agentName, scaleName, previousScore, nextScore, delta) {
   return `${agentName}: ${scaleName} updated ${previousScore} → ${nextScore} (+${delta})`;
 }
 
+function createPendingBrief({
+  phqScore,
+  gadScore,
+  riskLevel,
+  triggeredKeywords,
+  escalationReason,
+}) {
+  return {
+    severityBadge: riskLevel,
+    phq9Score: phqScore,
+    gad7Score: gadScore,
+    riskLevel: riskLevel === 'SEVERE' ? 'Critical' : 'High',
+    keyTriggers: triggeredKeywords.length ? triggeredKeywords : ['threshold exceeded'],
+    conversationSummary: ['Setu is generating the structured counsellor summary.'],
+    recommendedOpener: 'I can see you have been carrying a lot lately. I am here with you, and I have time to listen.',
+    escalationReason,
+    sessionDuration: 'In progress',
+    timestamp: new Date().toISOString(),
+    isPending: true,
+  };
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 export default function App() {
   const [messages, setMessages] = useState([]);
   const [agentStatuses, setAgentStatuses] = useState(INITIAL_AGENT_STATUSES);
@@ -45,6 +66,7 @@ export default function App() {
   const [isEscalated, setIsEscalated] = useState(false);
   const [counsellorBrief, setCounsellorBrief] = useState(null);
   const [isSunnaLoading, setIsSunnaLoading] = useState(false);
+  const [sessionResetKey, setSessionResetKey] = useState(0);
   const sessionStartedAt = useRef(new Date().toISOString());
   const escalationStartedRef = useRef(false);
 
@@ -66,6 +88,21 @@ export default function App() {
     }));
   };
 
+  const handleResetSession = () => {
+    setMessages([]);
+    setAgentStatuses(INITIAL_AGENT_STATUSES);
+    setPhqScore(0);
+    setGadScore(0);
+    setRiskLevel('MINIMAL');
+    setActivityLog([]);
+    setIsEscalated(false);
+    setCounsellorBrief(null);
+    setIsSunnaLoading(false);
+    setSessionResetKey((currentKey) => currentKey + 1);
+    sessionStartedAt.current = new Date().toISOString();
+    escalationStartedRef.current = false;
+  };
+
   const handleSendMessage = async (messageText) => {
     const userMessage = {
       id: createId('user'),
@@ -81,7 +118,10 @@ export default function App() {
     setAgentStatus('sunna', 'LISTENING');
     addActivity('Sunna: GPT-4o response requested');
 
-    const sunnaPromise = getSunnaResponse(conversationForAgents);
+    const sunnaPromise = Promise.all([
+      getSunnaResponse(conversationForAgents),
+      wait(650),
+    ]).then(([responseText]) => responseText);
 
     // Samajhna runs immediately and independently from Sunna's response cycle.
     setAgentStatus('samajhna', 'SCORING');
@@ -119,6 +159,13 @@ export default function App() {
         setIsEscalated(true);
         setAgentStatus('setu', 'BRIEFING');
         addActivity('Setu: Generating counsellor brief...');
+        setCounsellorBrief(createPendingBrief({
+          phqScore: scoringResult.newPHQ,
+          gadScore: scoringResult.newGAD,
+          riskLevel: routeDecision.riskLevel,
+          triggeredKeywords: scoringResult.triggeredKeywords,
+          escalationReason: routeDecision.reason,
+        }));
 
         generateCounsellorBrief({
           conversationHistory: conversationForAgents,
@@ -130,7 +177,14 @@ export default function App() {
           sessionStartedAt: sessionStartedAt.current,
         })
           .then((brief) => {
-            setCounsellorBrief(brief);
+            setCounsellorBrief({
+              ...brief,
+              phq9Score: scoringResult.newPHQ,
+              gad7Score: scoringResult.newGAD,
+              severityBadge: routeDecision.riskLevel,
+              escalationReason: routeDecision.reason,
+              isPending: false,
+            });
             setAgentStatus('setu', 'COMPLETE');
             addActivity('Setu: Brief ready — counsellor dashboard active');
           })
@@ -191,6 +245,8 @@ export default function App() {
           activityLog={activityLog}
           isEscalated={isEscalated}
           counsellorBrief={counsellorBrief}
+          onResetSession={handleResetSession}
+          sessionResetKey={sessionResetKey}
         />
       </section>
     </main>
