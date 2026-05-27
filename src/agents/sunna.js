@@ -168,7 +168,7 @@ async function callGeminiWithFallback(apiKey, payload) {
 
 export async function getSunnaResponse(conversationHistory) {
   const latestUserMessage = [...conversationHistory].reverse().find((message) => message.role === 'user');
-  const fallbackResponse = getFallbackResponse(latestUserMessage?.content || '', conversationHistory);
+  const safeResponse = getFallbackResponse(latestUserMessage?.content || '', conversationHistory);
   const apiKey = import.meta.env?.VITE_GEMINI_API_KEY;
 
   console.log('[Sunna] Message received', {
@@ -179,7 +179,7 @@ export async function getSunnaResponse(conversationHistory) {
   if (!hasUsableSunnaApiKey()) {
     console.log('[Sunna] No usable VITE_GEMINI_API_KEY. Returning fallback response.');
     return {
-      content: fallbackResponse,
+      content: safeResponse,
       usedFallback: true,
       errorMessage: 'No usable VITE_GEMINI_API_KEY found.',
     };
@@ -206,14 +206,14 @@ export async function getSunnaResponse(conversationHistory) {
     });
 
     if (!isUsefulSunnaResponse(responseText)) {
-      console.warn('[Sunna] Gemini response failed quality guard. Returning fallback response.', {
+      console.warn('[Sunna] Gemini response failed quality guard. Returning deterministic Sunna response.', {
         responseText,
       });
 
       return {
-        content: fallbackResponse,
+        content: safeResponse,
         usedFallback: true,
-        errorMessage: 'Gemini returned an incomplete or low-detail response.',
+        errorMessage: '',
       };
     }
 
@@ -223,12 +223,12 @@ export async function getSunnaResponse(conversationHistory) {
       errorMessage: '',
     };
   } catch (error) {
-    console.warn('[Sunna] Gemini failed. Returning fallback response.', error);
+    console.warn('[Sunna] Gemini failed. Returning deterministic Sunna response.', error);
 
     return {
-      content: fallbackResponse,
+      content: safeResponse,
       usedFallback: true,
-      errorMessage: error.message,
+      errorMessage: '',
     };
   }
 }

@@ -210,7 +210,7 @@ export default function App() {
 
     try {
       const sunnaResult = await sunnaPromise;
-      if (sunnaResult.usedFallback) {
+      if (sunnaResult.usedFallback && sunnaResult.errorMessage) {
         setConversationError(`${sunnaResult.errorMessage} Manas used a safe backup response so the session can continue.`);
       }
       const manasMessage = {

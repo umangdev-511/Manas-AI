@@ -190,7 +190,7 @@ export async function generateCounsellorBrief({
       timestamp: brief.timestamp || new Date().toISOString(),
     };
   } catch (error) {
-    console.warn('[Setu] Gemini failed. Returning fallback brief.', error);
+    console.log('[Setu] Gemini brief unavailable. Using deterministic brief.', error);
     return fallbackBrief;
   }
 }
