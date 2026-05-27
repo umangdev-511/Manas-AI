@@ -61,6 +61,7 @@ const PHQ_SIGNALS = [
       /\bisolated\b/i,
       /\bwithdrawn\b/i,
       /\bno one to talk\b/i,
+      /\bno one to share\b/i,
       /\bno one understands\b/i,
     ],
   },
@@ -91,6 +92,7 @@ const GAD_SIGNALS = [
       /\bworried\b/i,
       /\bworrying\b/i,
       /\bcan't stop worrying\b/i,
+      /\ball the time\b/i,
     ],
   },
   {
@@ -104,6 +106,7 @@ const GAD_SIGNALS = [
       /\boverwhelm/i,
       /\bspiral/i,
       /\bfalling apart\b/i,
+      /\btoo much to handle\b/i,
     ],
   },
   {

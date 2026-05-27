@@ -150,7 +150,9 @@ export default function App() {
       crisisKeywordFound: scoringResult.crisisKeywordFound,
     });
 
-    setRiskLevel(routeDecision.riskLevel);
+    if (!escalationStartedRef.current || routeDecision.shouldEscalate) {
+      setRiskLevel(routeDecision.riskLevel);
+    }
 
     if (routeDecision.shouldEscalate) {
       setAgentStatus('nirdeshak', 'ESCALATED');
@@ -193,8 +195,11 @@ export default function App() {
           .catch((error) => {
             setAgentStatus('setu', 'COMPLETE');
             addActivity(`Setu: Brief generation failed — ${error.message}`);
-          });
+        });
       }
+    } else if (escalationStartedRef.current) {
+      setAgentStatus('nirdeshak', 'ESCALATED');
+      addActivity('Nirdeshak: Case already escalated — maintaining counsellor route');
     } else {
       setAgentStatus('nirdeshak', 'COMPLETE');
       addActivity(`Nirdeshak: ${routeDecision.reason}`);
