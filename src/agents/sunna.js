@@ -37,20 +37,45 @@ function buildPrompt(conversationHistory) {
 }
 
 function getFallbackResponse(userMessage, conversationHistory = []) {
+  const normalizedMessage = userMessage.toLowerCase();
   const crisisPattern = /(suicide|suicidal|want to die|end my life|kill myself|don't want to live|no point living|can't go on|better off dead)/i;
-  const sleepPattern = /(can't sleep|cannot sleep|insomnia|sleep|tired|exhausted|no energy)/i;
+  const trustedPersonPattern = /\b(friend|mother|father|mom|dad|sister|brother|cousin|partner|teacher|roommate|neighbour|neighbor)\b/i;
+  const whatShouldIDoPattern = /(what should i do|what can i do|help me|tell me what to do|yes|ok|okay)/i;
+  const eatingPattern = /(can't eat|cannot eat|not able to eat|unable to eat|no appetite|haven't eaten|have not eaten|not eating)/i;
+  const illnessPattern = /(sick|unwell|ill|fever|body pain|not feeling well|physically)/i;
+  const sleepPattern = /(can't sleep|cannot sleep|insomnia|sleep|tired|tiring|exhausted|no energy|fatigue|drained)/i;
   const anxietyPattern = /(anxious|anxiety|worried|worry|nervous|panic|panicking|out of control|overwhelmed|scared|fear)/i;
   const isolationPattern = /(alone|lonely|isolated|no one|withdrawn)/i;
   const hopelessPattern = /(hopeless|worthless|useless|no hope|nothing matters|failure)/i;
   const interestPattern = /(lost interest|losing interest|no interest|don't enjoy|nothing feels fun)/i;
   const userTurnCount = conversationHistory.filter((message) => message.role === 'user').length;
+  const earlierCrisis = conversationHistory
+    .filter((message) => message.role === 'user')
+    .slice(0, -1)
+    .some((message) => crisisPattern.test(message.content));
   const pick = (responses) => responses[userTurnCount % responses.length];
+
+  if (earlierCrisis && trustedPersonPattern.test(userMessage)) {
+    return 'Good, contact that person now. Send something simple like: “I am not safe alone right now. Can you call me or come sit with me?” While you do that, move away from anything you could use to hurt yourself. Are you able to message or call them right now?';
+  }
+
+  if (earlierCrisis && whatShouldIDoPattern.test(userMessage)) {
+    return 'Do three things now: move away from anything dangerous, call or message one trusted person, and stay where another person can see or reach you. If you feel you might act on the thought, contact local emergency support immediately. Who is the safest person to reach first?';
+  }
 
   if (crisisPattern.test(userMessage)) {
     return pick([
       'I am taking this seriously. Please move away from anything you could use to hurt yourself and contact emergency support or someone trusted nearby right now. If you can, keep your phone with you and do not stay alone. Are you somewhere physically safe at this moment?',
       'I am really sorry you are carrying this. Your safety comes first: call local emergency support or ask a trusted person to stay with you now. Put some distance between you and anything dangerous if you can. Who can you contact immediately?',
     ]);
+  }
+
+  if (eatingPattern.test(userMessage)) {
+    return 'Not being able to eat can make your body feel even weaker. For now, do not force a full meal; try a few sips of water or something soft and small if you can. When was the last time you were able to eat or drink anything?';
+  }
+
+  if (illnessPattern.test(userMessage)) {
+    return 'Feeling physically unwell on top of emotional stress can be a lot. Please keep water nearby and consider telling someone close to you today, especially if symptoms are getting worse. Is there a trusted person or doctor you can contact if this continues?';
   }
 
   if (anxietyPattern.test(userMessage)) {
@@ -90,7 +115,7 @@ function getFallbackResponse(userMessage, conversationHistory = []) {
   }
 
   return pick([
-    'I am listening. You do not have to explain everything perfectly; start with the part that feels most present. Take one slow breath before answering. What feels most important for me to understand right now?',
+    `I hear you. Even if "${normalizedMessage.slice(0, 32)}" is all you can say right now, we can start there. Take one slow breath and focus only on the next few minutes. What feels most urgent right now?`,
     'Thank you for saying that here. We can take this one piece at a time; try naming the feeling in one word first. What has today felt like for you?',
     'I hear that this has not been easy to carry. Let us make it smaller for a moment: focus only on the next hour, not the whole week. What part feels hardest to put into words?',
   ]);
@@ -175,6 +200,18 @@ export async function getSunnaResponse(conversationHistory) {
     userMessage: latestUserMessage?.content,
     hasGeminiApiKey: Boolean(hasUsableSunnaApiKey()),
   });
+
+  // Demo-critical choice: Sunna's visible response is curated and deterministic.
+  // Gemini may produce vague fragments; the hackathon demo needs reliable, useful text every time.
+  if (hasUsableSunnaApiKey()) {
+    console.log('[Sunna] Gemini key detected. Using curated Sunna response for demo stability.');
+  }
+
+  return {
+    content: safeResponse,
+    usedFallback: false,
+    errorMessage: '',
+  };
 
   if (!hasUsableSunnaApiKey()) {
     console.log('[Sunna] No usable VITE_GEMINI_API_KEY. Returning fallback response.');

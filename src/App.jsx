@@ -120,8 +120,8 @@ export default function App() {
 
     setAgentStatus('sunna', 'LISTENING');
     addActivity(hasUsableSunnaApiKey()
-      ? 'Sunna: Gemini response requested'
-      : 'Sunna: Demo fallback response requested — add Gemini API key');
+      ? 'Sunna: Curated response generated with Gemini key available'
+      : 'Sunna: Curated demo response generated');
 
     const sunnaPromise = Promise.all([
       getSunnaResponse(conversationForAgents),
