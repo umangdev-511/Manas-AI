@@ -27,10 +27,15 @@ function hasUsableApiKey() {
 }
 
 function parseJsonObject(text) {
+  const cleanedText = text
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
   try {
-    return JSON.parse(text);
+    return JSON.parse(cleanedText);
   } catch {
-    const match = text.match(/\{[\s\S]*\}/);
+    const match = cleanedText.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('Setu response did not contain JSON');
     return JSON.parse(match[0]);
   }

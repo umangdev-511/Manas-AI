@@ -15,6 +15,9 @@ Rules:
 - Then ask exactly one gentle follow-up question.
 - Avoid repeating the same style of question across turns.
 - Keep the response under 110 words.
+- Return 2-4 complete sentences.
+- Do not stop mid-sentence.
+- Do not answer with only validation.
 - If the user mentions self-harm or wanting to die, be calm and direct:
   first ask them to move toward immediate safety and contact emergency support
   or a trusted person nearby, then ask one direct safety question.
@@ -100,6 +103,32 @@ function extractGeminiText(data) {
     .trim();
 }
 
+function isUsefulSunnaResponse(responseText) {
+  if (!responseText) return false;
+  if (responseText.length < 70) return false;
+  if (!/[.!?]$/.test(responseText.trim())) return false;
+  if (!responseText.includes('?')) return false;
+
+  const actionSignals = [
+    'try',
+    'please',
+    'take',
+    'call',
+    'contact',
+    'write',
+    'move',
+    'choose',
+    'name',
+    'place',
+    'drink',
+    'sit',
+    'step',
+  ];
+  const normalizedText = responseText.toLowerCase();
+
+  return actionSignals.some((signal) => normalizedText.includes(signal));
+}
+
 async function callGeminiWithFallback(apiKey, payload) {
   let lastError = null;
 
@@ -165,8 +194,8 @@ export async function getSunnaResponse(conversationHistory) {
         },
       ],
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 180,
+        temperature: 0.45,
+        maxOutputTokens: 240,
       },
     });
     const responseText = extractGeminiText(result.data);
@@ -176,10 +205,22 @@ export async function getSunnaResponse(conversationHistory) {
       usedFallback: !responseText,
     });
 
+    if (!isUsefulSunnaResponse(responseText)) {
+      console.warn('[Sunna] Gemini response failed quality guard. Returning fallback response.', {
+        responseText,
+      });
+
+      return {
+        content: fallbackResponse,
+        usedFallback: true,
+        errorMessage: 'Gemini returned an incomplete or low-detail response.',
+      };
+    }
+
     return {
-      content: responseText || fallbackResponse,
-      usedFallback: !responseText,
-      errorMessage: responseText ? '' : 'Gemini returned an empty response.',
+      content: responseText,
+      usedFallback: false,
+      errorMessage: '',
     };
   } catch (error) {
     console.warn('[Sunna] Gemini failed. Returning fallback response.', error);
