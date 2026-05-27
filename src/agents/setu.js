@@ -1,4 +1,5 @@
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash'];
 
 const SYSTEM_PROMPT = `
 You are Setu, the counsellor briefing agent for Manas.
@@ -40,6 +41,43 @@ function extractGeminiText(data) {
     ?.map((part) => part.text || '')
     .join('')
     .trim();
+}
+
+async function callGeminiWithFallback(apiKey, payload) {
+  let lastError = null;
+
+  for (const model of GEMINI_MODELS) {
+    const response = await fetch(`${GEMINI_API_BASE_URL}/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    console.log('[Setu] Gemini brief request completed', {
+      model,
+      ok: response.ok,
+      status: response.status,
+    });
+
+    if (response.ok) {
+      return {
+        model,
+        data: await response.json(),
+      };
+    }
+
+    lastError = {
+      model,
+      status: response.status,
+      text: await response.text(),
+    };
+
+    console.warn('[Setu] Gemini model failed, trying next if available.', lastError);
+  }
+
+  throw new Error(`Gemini request failed with status ${lastError?.status || 'unknown'} on ${lastError?.model || 'all models'}.`);
 }
 
 function createFallbackBrief({
@@ -117,12 +155,8 @@ export async function generateCounsellorBrief({
     timestamp: new Date().toISOString(),
   })}`;
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  try {
+    const result = await callGeminiWithFallback(apiKey, {
       contents: [
         {
           role: 'user',
@@ -134,32 +168,24 @@ export async function generateCounsellorBrief({
         maxOutputTokens: 420,
         responseMimeType: 'application/json',
       },
-    }),
-  });
-
-  console.log('[Setu] Gemini brief request completed', {
-    ok: response.ok,
-    status: response.status,
-  });
-
-  if (!response.ok) {
-    console.warn('[Setu] Gemini failed. Returning fallback brief.', {
-      status: response.status,
-      errorText: await response.text(),
     });
+    const responseText = extractGeminiText(result.data);
+    const brief = parseJsonObject(responseText || '{}');
+
+    console.log('[Setu] Brief JSON ready', {
+      model: result.model,
+    });
+
+    return {
+      ...fallbackBrief,
+      ...brief,
+      phq9Score: phqScore,
+      gad7Score: gadScore,
+      escalationReason,
+      timestamp: brief.timestamp || new Date().toISOString(),
+    };
+  } catch (error) {
+    console.warn('[Setu] Gemini failed. Returning fallback brief.', error);
     return fallbackBrief;
   }
-
-  const data = await response.json();
-  const responseText = extractGeminiText(data);
-  const brief = parseJsonObject(responseText || '{}');
-
-  return {
-    ...fallbackBrief,
-    ...brief,
-    phq9Score: phqScore,
-    gad7Score: gadScore,
-    escalationReason,
-    timestamp: brief.timestamp || new Date().toISOString(),
-  };
 }

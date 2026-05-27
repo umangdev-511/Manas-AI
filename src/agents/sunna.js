@@ -1,4 +1,5 @@
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash'];
 
 const SYSTEM_PROMPT = `
 You are Sunna, the listening agent for Manas.
@@ -99,6 +100,43 @@ function extractGeminiText(data) {
     .trim();
 }
 
+async function callGeminiWithFallback(apiKey, payload) {
+  let lastError = null;
+
+  for (const model of GEMINI_MODELS) {
+    const response = await fetch(`${GEMINI_API_BASE_URL}/${model}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    console.log('[Sunna] Gemini request completed', {
+      model,
+      ok: response.ok,
+      status: response.status,
+    });
+
+    if (response.ok) {
+      return {
+        model,
+        data: await response.json(),
+      };
+    }
+
+    lastError = {
+      model,
+      status: response.status,
+      text: await response.text(),
+    };
+
+    console.warn('[Sunna] Gemini model failed, trying next if available.', lastError);
+  }
+
+  throw new Error(`Gemini request failed with status ${lastError?.status || 'unknown'} on ${lastError?.model || 'all models'}.`);
+}
+
 export async function getSunnaResponse(conversationHistory) {
   const latestUserMessage = [...conversationHistory].reverse().find((message) => message.role === 'user');
   const fallbackResponse = getFallbackResponse(latestUserMessage?.content || '', conversationHistory);
@@ -118,12 +156,8 @@ export async function getSunnaResponse(conversationHistory) {
     };
   }
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  try {
+    const result = await callGeminiWithFallback(apiKey, {
       contents: [
         {
           role: 'user',
@@ -134,37 +168,26 @@ export async function getSunnaResponse(conversationHistory) {
         temperature: 0.7,
         maxOutputTokens: 180,
       },
-    }),
-  });
-
-  console.log('[Sunna] Gemini request completed', {
-    ok: response.ok,
-    status: response.status,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.warn('[Sunna] Gemini failed. Returning fallback response.', {
-      status: response.status,
-      errorText,
     });
+    const responseText = extractGeminiText(result.data);
+
+    console.log('[Sunna] Response text ready', {
+      model: result.model,
+      usedFallback: !responseText,
+    });
+
+    return {
+      content: responseText || fallbackResponse,
+      usedFallback: !responseText,
+      errorMessage: responseText ? '' : 'Gemini returned an empty response.',
+    };
+  } catch (error) {
+    console.warn('[Sunna] Gemini failed. Returning fallback response.', error);
+
     return {
       content: fallbackResponse,
       usedFallback: true,
-      errorMessage: `Gemini request failed with status ${response.status}.`,
+      errorMessage: error.message,
     };
   }
-
-  const data = await response.json();
-  const responseText = extractGeminiText(data);
-
-  console.log('[Sunna] Response text ready', {
-    usedFallback: !responseText,
-  });
-
-  return {
-    content: responseText || fallbackResponse,
-    usedFallback: !responseText,
-    errorMessage: responseText ? '' : 'Gemini returned an empty response.',
-  };
 }
