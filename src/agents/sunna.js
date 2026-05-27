@@ -1,5 +1,4 @@
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-const MODEL = 'gpt-4o';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 const SYSTEM_PROMPT = `
 You are Sunna, the listening agent for Manas.
@@ -21,15 +20,16 @@ Rules:
 `;
 
 export function hasUsableSunnaApiKey() {
-  const apiKey = import.meta.env?.VITE_OPENAI_API_KEY;
+  const apiKey = import.meta.env?.VITE_GEMINI_API_KEY;
   return apiKey && apiKey !== 'placeholder' && apiKey !== 'your_key_here';
 }
 
-function buildMessages(conversationHistory) {
-  return conversationHistory.map((message) => ({
-    role: message.role === 'user' ? 'user' : 'assistant',
-    content: message.content,
-  }));
+function buildPrompt(conversationHistory) {
+  const transcript = conversationHistory
+    .map((message) => `${message.role === 'user' ? 'User' : 'Manas'}: ${message.content}`)
+    .join('\n');
+
+  return `${SYSTEM_PROMPT}\n\nConversation so far:\n${transcript}\n\nRespond as Sunna now.`;
 }
 
 function getFallbackResponse(userMessage, conversationHistory = []) {
@@ -92,34 +92,79 @@ function getFallbackResponse(userMessage, conversationHistory = []) {
   ]);
 }
 
+function extractGeminiText(data) {
+  return data.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || '')
+    .join('')
+    .trim();
+}
+
 export async function getSunnaResponse(conversationHistory) {
   const latestUserMessage = [...conversationHistory].reverse().find((message) => message.role === 'user');
   const fallbackResponse = getFallbackResponse(latestUserMessage?.content || '', conversationHistory);
+  const apiKey = import.meta.env?.VITE_GEMINI_API_KEY;
+
+  console.log('[Sunna] Message received', {
+    userMessage: latestUserMessage?.content,
+    hasGeminiApiKey: Boolean(hasUsableSunnaApiKey()),
+  });
 
   if (!hasUsableSunnaApiKey()) {
-    return fallbackResponse;
+    console.log('[Sunna] No usable VITE_GEMINI_API_KEY. Returning fallback response.');
+    return {
+      content: fallbackResponse,
+      usedFallback: true,
+      errorMessage: 'No usable VITE_GEMINI_API_KEY found.',
+    };
   }
 
-  const response = await fetch(OPENAI_API_URL, {
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env?.VITE_OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.7,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...buildMessages(conversationHistory),
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: buildPrompt(conversationHistory) }],
+        },
       ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 180,
+      },
     }),
   });
 
+  console.log('[Sunna] Gemini request completed', {
+    ok: response.ok,
+    status: response.status,
+  });
+
   if (!response.ok) {
-    return fallbackResponse;
+    const errorText = await response.text();
+    console.warn('[Sunna] Gemini failed. Returning fallback response.', {
+      status: response.status,
+      errorText,
+    });
+    return {
+      content: fallbackResponse,
+      usedFallback: true,
+      errorMessage: `Gemini request failed with status ${response.status}.`,
+    };
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content?.trim() || fallbackResponse;
+  const responseText = extractGeminiText(data);
+
+  console.log('[Sunna] Response text ready', {
+    usedFallback: !responseText,
+  });
+
+  return {
+    content: responseText || fallbackResponse,
+    usedFallback: !responseText,
+    errorMessage: responseText ? '' : 'Gemini returned an empty response.',
+  };
 }

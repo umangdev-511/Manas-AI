@@ -66,6 +66,7 @@ export default function App() {
   const [isEscalated, setIsEscalated] = useState(false);
   const [counsellorBrief, setCounsellorBrief] = useState(null);
   const [isSunnaLoading, setIsSunnaLoading] = useState(false);
+  const [conversationError, setConversationError] = useState('');
   const [sessionResetKey, setSessionResetKey] = useState(0);
   const sessionStartedAt = useRef(new Date().toISOString());
   const escalationStartedRef = useRef(false);
@@ -98,6 +99,7 @@ export default function App() {
     setIsEscalated(false);
     setCounsellorBrief(null);
     setIsSunnaLoading(false);
+    setConversationError('');
     setSessionResetKey((currentKey) => currentKey + 1);
     sessionStartedAt.current = new Date().toISOString();
     escalationStartedRef.current = false;
@@ -114,11 +116,12 @@ export default function App() {
 
     setMessages(conversationForAgents);
     setIsSunnaLoading(true);
+    setConversationError('');
 
     setAgentStatus('sunna', 'LISTENING');
     addActivity(hasUsableSunnaApiKey()
-      ? 'Sunna: GPT-4o response requested'
-      : 'Sunna: Demo fallback response requested — add API key for GPT-4o');
+      ? 'Sunna: Gemini response requested'
+      : 'Sunna: Demo fallback response requested — add Gemini API key');
 
     const sunnaPromise = Promise.all([
       getSunnaResponse(conversationForAgents),
@@ -206,11 +209,14 @@ export default function App() {
     }
 
     try {
-      const responseText = await sunnaPromise;
+      const sunnaResult = await sunnaPromise;
+      if (sunnaResult.usedFallback) {
+        setConversationError(`${sunnaResult.errorMessage} Manas used a safe backup response so the session can continue.`);
+      }
       const manasMessage = {
         id: createId('manas'),
         role: 'manas',
-        content: responseText,
+        content: sunnaResult.content,
         timestamp: new Date(),
       };
 
@@ -221,13 +227,14 @@ export default function App() {
       const fallbackMessage = {
         id: createId('manas'),
         role: 'manas',
-        content: 'I am here with you. Something briefly went wrong while I was responding, but you can keep sharing what is on your mind.',
+        content: 'I am here with you. Gemini did not respond, so I am using a safe backup response. Can you share what feels most urgent right now?',
         timestamp: new Date(),
       };
 
+      setConversationError(`Gemini request failed: ${error.message}. Manas used a backup response so the session can continue.`);
       setMessages((currentMessages) => [...currentMessages, fallbackMessage]);
       setAgentStatus('sunna', 'COMPLETE');
-      addActivity(`Sunna: GPT call failed — ${error.message}`);
+      addActivity(`Sunna: Gemini call failed — ${error.message}`);
     } finally {
       setIsSunnaLoading(false);
     }
@@ -240,6 +247,7 @@ export default function App() {
           messages={messages}
           onSendMessage={handleSendMessage}
           isLoading={isSunnaLoading}
+          errorMessage={conversationError}
         />
       </section>
 

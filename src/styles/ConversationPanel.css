@@ -85,6 +85,18 @@
   text-align: center;
 }
 
+.conversation-error {
+  border: 1px solid #FBBF24;
+  border-radius: 12px;
+  background: #FFFBEB;
+  color: #92400E;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 0 0 18px;
+  padding: 11px 13px;
+}
+
 .message-row {
   display: flex;
   flex-direction: column;

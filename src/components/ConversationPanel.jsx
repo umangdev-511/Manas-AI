@@ -5,6 +5,7 @@ export default function ConversationPanel({
   messages = [],
   onSendMessage,
   isLoading = false,
+  errorMessage = '',
 }) {
   const [draftMessage, setDraftMessage] = useState('');
   const messageEndRef = useRef(null);
@@ -51,6 +52,12 @@ export default function ConversationPanel({
       </header>
 
       <main className="message-area" aria-live="polite">
+        {errorMessage && (
+          <div className="conversation-error" role="status">
+            {errorMessage}
+          </div>
+        )}
+
         {messages.length === 0 && (
           <div className="welcome-message">
             Hi, I am Manas. This is a safe space — share whatever is on your mind.

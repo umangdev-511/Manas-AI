@@ -1,5 +1,4 @@
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-const MODEL = 'gpt-4o';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 const SYSTEM_PROMPT = `
 You are Setu, the counsellor briefing agent for Manas.
@@ -17,12 +16,12 @@ Return only valid JSON with this shape:
   "recommendedOpener": "I can see...",
   "escalationReason": "PHQ-9 score exceeded threshold (16/27)",
   "sessionDuration": "2 minutes",
-  "timestamp": "2026-05-26T10:00:00.000Z"
+  "timestamp": "2026-05-27T10:00:00.000Z"
 }
 `;
 
 function hasUsableApiKey() {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  const apiKey = import.meta.env?.VITE_GEMINI_API_KEY;
   return apiKey && apiKey !== 'placeholder' && apiKey !== 'your_key_here';
 }
 
@@ -34,6 +33,13 @@ function parseJsonObject(text) {
     if (!match) throw new Error('Setu response did not contain JSON');
     return JSON.parse(match[0]);
   }
+}
+
+function extractGeminiText(data) {
+  return data.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || '')
+    .join('')
+    .trim();
 }
 
 function createFallbackBrief({
@@ -86,46 +92,67 @@ export async function generateCounsellorBrief({
     escalationReason,
     sessionStartedAt,
   });
+  const apiKey = import.meta.env?.VITE_GEMINI_API_KEY;
+
+  console.log('[Setu] Brief generation requested', {
+    hasGeminiApiKey: Boolean(hasUsableApiKey()),
+    phqScore,
+    gadScore,
+    riskLevel,
+  });
 
   if (!hasUsableApiKey()) {
+    console.log('[Setu] No usable VITE_GEMINI_API_KEY. Returning fallback brief.');
     return fallbackBrief;
   }
 
-  const response = await fetch(OPENAI_API_URL, {
+  const prompt = `${SYSTEM_PROMPT}\n\nInput:\n${JSON.stringify({
+    conversationHistory,
+    phqScore,
+    gadScore,
+    riskLevel,
+    triggeredKeywords,
+    escalationReason,
+    sessionStartedAt,
+    timestamp: new Date().toISOString(),
+  })}`;
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+      contents: [
         {
           role: 'user',
-          content: JSON.stringify({
-            conversationHistory,
-            phqScore,
-            gadScore,
-            riskLevel,
-            triggeredKeywords,
-            escalationReason,
-            sessionStartedAt,
-            timestamp: new Date().toISOString(),
-          }),
+          parts: [{ text: prompt }],
         },
       ],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 420,
+        responseMimeType: 'application/json',
+      },
     }),
   });
 
+  console.log('[Setu] Gemini brief request completed', {
+    ok: response.ok,
+    status: response.status,
+  });
+
   if (!response.ok) {
-    throw new Error(`Setu API request failed: ${response.status}`);
+    console.warn('[Setu] Gemini failed. Returning fallback brief.', {
+      status: response.status,
+      errorText: await response.text(),
+    });
+    return fallbackBrief;
   }
 
   const data = await response.json();
-  const brief = parseJsonObject(data.choices?.[0]?.message?.content || '{}');
+  const responseText = extractGeminiText(data);
+  const brief = parseJsonObject(responseText || '{}');
 
   return {
     ...fallbackBrief,
