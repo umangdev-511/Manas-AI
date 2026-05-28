@@ -1,13 +1,15 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import './styles/App.css';
 
 import ConversationPanel from './components/ConversationPanel.jsx';
 import AgentDashboard from './components/AgentDashboard.jsx';
 
-import { getSunnaResponse, hasUsableSunnaApiKey } from './agents/sunna.js';
-import { scoreMessage } from './agents/samajhna.js';
-import { routeCase } from './agents/nirdeshak.js';
-import { generateCounsellorBrief } from './agents/setu.js';
+import { getSunnaResponse } from './agents/sunna.js';
+import {
+  analyzeMessage,
+  getInitialTriageState,
+  resetTriageState,
+} from './triage/triageEngine.js';
 
 const INITIAL_AGENT_STATUSES = {
   sunna: 'STANDBY',
@@ -16,38 +18,27 @@ const INITIAL_AGENT_STATUSES = {
   setu: 'STANDBY',
 };
 
+const JUDGE_DEMO_STEPS = [
+  {
+    label: 'Early distress',
+    message: 'I have been feeling low and tired lately.',
+  },
+  {
+    label: 'Isolation',
+    message: 'I have no one to share with.',
+  },
+  {
+    label: 'Human support recommended',
+    message: 'I feel hopeless and worthless.',
+  },
+  {
+    label: 'Urgent escalation',
+    message: 'I want to kill myself.',
+  },
+];
+
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function buildScoreLog(agentName, scaleName, previousScore, nextScore, delta) {
-  if (delta === 0) {
-    return `${agentName}: ${scaleName} unchanged at ${nextScore}`;
-  }
-
-  return `${agentName}: ${scaleName} updated ${previousScore} → ${nextScore} (+${delta})`;
-}
-
-function createPendingBrief({
-  phqScore,
-  gadScore,
-  riskLevel,
-  triggeredKeywords,
-  escalationReason,
-}) {
-  return {
-    severityBadge: riskLevel,
-    phq9Score: phqScore,
-    gad7Score: gadScore,
-    riskLevel: riskLevel === 'SEVERE' ? 'Critical' : 'High',
-    keyTriggers: triggeredKeywords.length ? triggeredKeywords : ['threshold exceeded'],
-    conversationSummary: ['Setu is generating the structured counsellor summary.'],
-    recommendedOpener: 'I can see you have been carrying a lot lately. I am here with you, and I have time to listen.',
-    escalationReason,
-    sessionDuration: 'In progress',
-    timestamp: new Date().toISOString(),
-    isPending: true,
-  };
 }
 
 function wait(ms) {
@@ -59,17 +50,14 @@ function wait(ms) {
 export default function App() {
   const [messages, setMessages] = useState([]);
   const [agentStatuses, setAgentStatuses] = useState(INITIAL_AGENT_STATUSES);
-  const [phqScore, setPhqScore] = useState(0);
-  const [gadScore, setGadScore] = useState(0);
-  const [riskLevel, setRiskLevel] = useState('MINIMAL');
+  const [triageState, setTriageState] = useState(getInitialTriageState);
   const [activityLog, setActivityLog] = useState([]);
   const [isEscalated, setIsEscalated] = useState(false);
-  const [counsellorBrief, setCounsellorBrief] = useState(null);
   const [isSunnaLoading, setIsSunnaLoading] = useState(false);
   const [conversationError, setConversationError] = useState('');
   const [sessionResetKey, setSessionResetKey] = useState(0);
-  const sessionStartedAt = useRef(new Date().toISOString());
-  const escalationStartedRef = useRef(false);
+  const [isJudgeDemoMode, setIsJudgeDemoMode] = useState(false);
+  const [judgeDemoStepIndex, setJudgeDemoStepIndex] = useState(0);
 
   const addActivity = (message) => {
     setActivityLog((currentLog) => [
@@ -78,6 +66,17 @@ export default function App() {
         timestamp: new Date(),
         message,
       },
+      ...currentLog,
+    ]);
+  };
+
+  const addActivities = (events) => {
+    setActivityLog((currentLog) => [
+      ...events.slice().reverse().map((event) => ({
+        id: createId('log'),
+        timestamp: new Date(),
+        message: event.message || event,
+      })),
       ...currentLog,
     ]);
   };
@@ -92,17 +91,26 @@ export default function App() {
   const handleResetSession = () => {
     setMessages([]);
     setAgentStatuses(INITIAL_AGENT_STATUSES);
-    setPhqScore(0);
-    setGadScore(0);
-    setRiskLevel('MINIMAL');
+    setTriageState(resetTriageState());
     setActivityLog([]);
     setIsEscalated(false);
-    setCounsellorBrief(null);
     setIsSunnaLoading(false);
     setConversationError('');
+    setIsJudgeDemoMode(false);
+    setJudgeDemoStepIndex(0);
     setSessionResetKey((currentKey) => currentKey + 1);
-    sessionStartedAt.current = new Date().toISOString();
-    escalationStartedRef.current = false;
+  };
+
+  const handleToggleJudgeDemo = () => {
+    setIsJudgeDemoMode((currentValue) => !currentValue);
+  };
+
+  const handleJudgeDemoStep = (stepIndex) => {
+    if (isSunnaLoading || stepIndex !== judgeDemoStepIndex) return;
+
+    const step = JUDGE_DEMO_STEPS[stepIndex];
+    setJudgeDemoStepIndex((currentIndex) => Math.min(currentIndex + 1, JUDGE_DEMO_STEPS.length));
+    handleSendMessage(step.message);
   };
 
   const handleSendMessage = async (messageText) => {
@@ -119,9 +127,7 @@ export default function App() {
     setConversationError('');
 
     setAgentStatus('sunna', 'LISTENING');
-    addActivity(hasUsableSunnaApiKey()
-      ? 'Sunna: Curated response generated with Gemini key available'
-      : 'Sunna: Curated demo response generated');
+    addActivity('Sunna - Intake response generated');
 
     const sunnaPromise = Promise.all([
       getSunnaResponse(conversationForAgents),
@@ -130,82 +136,33 @@ export default function App() {
 
     // Samajhna runs immediately and independently from Sunna's response cycle.
     setAgentStatus('samajhna', 'SCORING');
-    addActivity('Samajhna: Silent PHQ-9/GAD-7 scoring started');
+    addActivity('Samajhna - Silent signal tracking started');
 
-    const scoringResult = scoreMessage(messageText, phqScore, gadScore);
-    setPhqScore(scoringResult.newPHQ);
-    setGadScore(scoringResult.newGAD);
-    addActivity(buildScoreLog('Samajhna', 'PHQ-9', phqScore, scoringResult.newPHQ, scoringResult.phqDelta));
-    addActivity(buildScoreLog('Samajhna', 'GAD-7', gadScore, scoringResult.newGAD, scoringResult.gadDelta));
-
-    if (scoringResult.triggeredKeywords.length > 0) {
-      addActivity(`Samajhna: Signals detected — ${scoringResult.triggeredKeywords.join(', ')}`);
-    }
+    const previousTriageState = triageState;
+    const nextTriageState = analyzeMessage(messageText, previousTriageState);
+    setTriageState(nextTriageState);
+    addActivities(nextTriageState.agentEvents);
 
     setAgentStatus('samajhna', 'COMPLETE');
 
     setAgentStatus('nirdeshak', 'ROUTING');
-    addActivity('Nirdeshak: Autonomous threshold check started');
+    addActivity('Nirdeshak - Route evaluation completed');
 
-    const routeDecision = routeCase({
-      phqScore: scoringResult.newPHQ,
-      gadScore: scoringResult.newGAD,
-      crisisKeywordFound: scoringResult.crisisKeywordFound,
-    });
-
-    if (!escalationStartedRef.current || routeDecision.shouldEscalate) {
-      setRiskLevel(routeDecision.riskLevel);
-    }
-
-    if (routeDecision.shouldEscalate) {
+    if (nextTriageState.escalationLocked) {
       setAgentStatus('nirdeshak', 'ESCALATED');
-      addActivity(`Nirdeshak: ESCALATION TRIGGERED — ${routeDecision.reason}`);
+      setIsEscalated(true);
 
-      if (!escalationStartedRef.current) {
-        escalationStartedRef.current = true;
-        setIsEscalated(true);
+      if (!previousTriageState.escalationLocked) {
         setAgentStatus('setu', 'BRIEFING');
-        addActivity('Setu: Generating counsellor brief...');
-        setCounsellorBrief(createPendingBrief({
-          phqScore: scoringResult.newPHQ,
-          gadScore: scoringResult.newGAD,
-          riskLevel: routeDecision.riskLevel,
-          triggeredKeywords: scoringResult.triggeredKeywords,
-          escalationReason: routeDecision.reason,
-        }));
-
-        generateCounsellorBrief({
-          conversationHistory: conversationForAgents,
-          phqScore: scoringResult.newPHQ,
-          gadScore: scoringResult.newGAD,
-          riskLevel: routeDecision.riskLevel,
-          triggeredKeywords: scoringResult.triggeredKeywords,
-          escalationReason: routeDecision.reason,
-          sessionStartedAt: sessionStartedAt.current,
-        })
-          .then((brief) => {
-            setCounsellorBrief({
-              ...brief,
-              phq9Score: scoringResult.newPHQ,
-              gad7Score: scoringResult.newGAD,
-              severityBadge: routeDecision.riskLevel,
-              escalationReason: routeDecision.reason,
-              isPending: false,
-            });
-            setAgentStatus('setu', 'COMPLETE');
-            addActivity('Setu: Brief ready — counsellor dashboard active');
-          })
-          .catch((error) => {
-            setAgentStatus('setu', 'COMPLETE');
-            addActivity(`Setu: Brief generation failed — ${error.message}`);
-        });
+        addActivity('Setu - Handoff brief assembled by triage engine');
       }
-    } else if (escalationStartedRef.current) {
-      setAgentStatus('nirdeshak', 'ESCALATED');
-      addActivity('Nirdeshak: Case already escalated — maintaining counsellor route');
+
+      setAgentStatus('setu', nextTriageState.counsellorBrief ? 'COMPLETE' : 'BRIEFING');
     } else {
+      setIsEscalated(false);
+      setAgentStatus('setu', 'STANDBY');
+
       setAgentStatus('nirdeshak', 'COMPLETE');
-      addActivity(`Nirdeshak: ${routeDecision.reason}`);
     }
 
     try {
@@ -222,19 +179,19 @@ export default function App() {
 
       setMessages((currentMessages) => [...currentMessages, manasMessage]);
       setAgentStatus('sunna', 'COMPLETE');
-      addActivity('Sunna: Response sent to user');
+      addActivity('Sunna - Response sent to user');
     } catch (error) {
       const fallbackMessage = {
         id: createId('manas'),
         role: 'manas',
-        content: 'I am here with you. Gemini did not respond, so I am using a safe backup response. Can you share what feels most urgent right now?',
+        content: 'I am here with you. Something went wrong in the response cycle, but this session can continue. Can you share what feels most urgent right now?',
         timestamp: new Date(),
       };
 
-      setConversationError(`Gemini request failed: ${error.message}. Manas used a backup response so the session can continue.`);
+      setConversationError(`Response failed: ${error.message}. Manas used a backup response so the session can continue.`);
       setMessages((currentMessages) => [...currentMessages, fallbackMessage]);
       setAgentStatus('sunna', 'COMPLETE');
-      addActivity(`Sunna: Gemini call failed — ${error.message}`);
+      addActivity(`Sunna - Response cycle fallback used: ${error.message}`);
     } finally {
       setIsSunnaLoading(false);
     }
@@ -254,13 +211,23 @@ export default function App() {
       <section className="app-shell__dashboard">
         <AgentDashboard
           agentStatuses={agentStatuses}
-          phqScore={phqScore}
-          gadScore={gadScore}
-          riskLevel={riskLevel}
+          phqScore={triageState.phqScore}
+          gadScore={triageState.gadScore}
+          riskLevel={triageState.riskLevel}
+          systemMode={triageState.systemMode}
+          detectedEvidence={triageState.evidence}
+          routeStatus={triageState.route}
+          escalationLocked={triageState.escalationLocked}
           activityLog={activityLog}
           isEscalated={isEscalated}
-          counsellorBrief={counsellorBrief}
+          counsellorBrief={triageState.counsellorBrief}
           onResetSession={handleResetSession}
+          isJudgeDemoMode={isJudgeDemoMode}
+          onToggleJudgeDemo={handleToggleJudgeDemo}
+          demoSteps={JUDGE_DEMO_STEPS}
+          demoStepIndex={judgeDemoStepIndex}
+          isDemoBusy={isSunnaLoading}
+          onDemoStepClick={handleJudgeDemoStep}
           sessionResetKey={sessionResetKey}
         />
       </section>
