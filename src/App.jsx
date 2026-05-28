@@ -59,12 +59,12 @@ export default function App() {
   const [isJudgeDemoMode, setIsJudgeDemoMode] = useState(false);
   const [judgeDemoStepIndex, setJudgeDemoStepIndex] = useState(0);
 
-  const addActivity = (message) => {
+  const addActivity = (event) => {
     setActivityLog((currentLog) => [
       {
         id: createId('log'),
         timestamp: new Date(),
-        message,
+        ...(typeof event === 'string' ? { message: event } : event),
       },
       ...currentLog,
     ]);
@@ -75,7 +75,7 @@ export default function App() {
       ...events.slice().reverse().map((event) => ({
         id: createId('log'),
         timestamp: new Date(),
-        message: event.message || event,
+        ...(typeof event === 'string' ? { message: event } : event),
       })),
       ...currentLog,
     ]);
@@ -127,7 +127,12 @@ export default function App() {
     setConversationError('');
 
     setAgentStatus('sunna', 'LISTENING');
-    addActivity('Sunna - Intake response generated');
+    addActivity({
+      agent: 'Sunna',
+      action: 'Intake response generated',
+      detail: 'warm user-facing reply prepared',
+      severity: 'info',
+    });
 
     const sunnaPromise = Promise.all([
       getSunnaResponse(conversationForAgents),
@@ -136,7 +141,6 @@ export default function App() {
 
     // Samajhna runs immediately and independently from Sunna's response cycle.
     setAgentStatus('samajhna', 'SCORING');
-    addActivity('Samajhna - Silent signal tracking started');
 
     const previousTriageState = triageState;
     const nextTriageState = analyzeMessage(messageText, previousTriageState);
@@ -146,7 +150,6 @@ export default function App() {
     setAgentStatus('samajhna', 'COMPLETE');
 
     setAgentStatus('nirdeshak', 'ROUTING');
-    addActivity('Nirdeshak - Route evaluation completed');
 
     if (nextTriageState.escalationLocked) {
       setAgentStatus('nirdeshak', 'ESCALATED');
@@ -154,7 +157,6 @@ export default function App() {
 
       if (!previousTriageState.escalationLocked) {
         setAgentStatus('setu', 'BRIEFING');
-        addActivity('Setu - Handoff brief assembled by triage engine');
       }
 
       setAgentStatus('setu', nextTriageState.counsellorBrief ? 'COMPLETE' : 'BRIEFING');
@@ -179,7 +181,6 @@ export default function App() {
 
       setMessages((currentMessages) => [...currentMessages, manasMessage]);
       setAgentStatus('sunna', 'COMPLETE');
-      addActivity('Sunna - Response sent to user');
     } catch (error) {
       const fallbackMessage = {
         id: createId('manas'),
@@ -191,7 +192,12 @@ export default function App() {
       setConversationError(`Response failed: ${error.message}. Manas used a backup response so the session can continue.`);
       setMessages((currentMessages) => [...currentMessages, fallbackMessage]);
       setAgentStatus('sunna', 'COMPLETE');
-      addActivity(`Sunna - Response cycle fallback used: ${error.message}`);
+      addActivity({
+        agent: 'Sunna',
+        action: 'Response fallback used',
+        detail: error.message,
+        severity: 'watch',
+      });
     } finally {
       setIsSunnaLoading(false);
     }

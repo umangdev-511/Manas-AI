@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import '../styles/AgentDashboard.css';
 
 function formatBriefTimestamp(timestamp) {
@@ -35,6 +35,7 @@ function ListBlock({ title, items = [], ordered = false }) {
 }
 
 export default function CounsellorBrief({ brief = {} }) {
+  const [copyStatus, setCopyStatus] = useState('Copy Brief');
   const {
     priorityBadge = 'HANDOFF READY',
     severityBadge = 'PENDING',
@@ -57,6 +58,43 @@ export default function CounsellorBrief({ brief = {} }) {
       `Message ${item.step}: ${item.detectedEvidence.join(', ') || 'no signal'} -> ${item.riskAfterMessage} / ${item.routeAfterMessage}`
     ))
     : conversationSummary;
+  const briefText = useMemo(() => [
+    `Priority: ${priorityBadge}`,
+    `Risk: ${riskLevel}`,
+    `Escalation reason: ${escalationReason}`,
+    `Scores: PHQ-style ${phq9Score}/27, GAD-style ${gad7Score}/21`,
+    `Key signals: ${keySignals.join(', ')}`,
+    'Timeline:',
+    ...timelineItems.map((item) => `- ${item}`),
+    'Suggested first questions:',
+    ...suggestedFirstQuestions.map((item, index) => `${index + 1}. ${item}`),
+    `Recommended immediate action: ${recommendedImmediateAction}`,
+    `What not to do: ${whatNotToDo.join('; ')}`,
+    `Handoff summary: ${handoffSummary}`,
+  ].filter(Boolean).join('\n'), [
+    priorityBadge,
+    riskLevel,
+    escalationReason,
+    phq9Score,
+    gad7Score,
+    keySignals,
+    timelineItems,
+    suggestedFirstQuestions,
+    recommendedImmediateAction,
+    whatNotToDo,
+    handoffSummary,
+  ]);
+
+  const handleCopyBrief = async () => {
+    try {
+      await navigator.clipboard.writeText(briefText);
+      setCopyStatus('Copied');
+      window.setTimeout(() => setCopyStatus('Copy Brief'), 1400);
+    } catch {
+      setCopyStatus('Copy failed');
+      window.setTimeout(() => setCopyStatus('Copy Brief'), 1400);
+    }
+  };
 
   return (
     <section className="brief-card" aria-label="Counsellor brief">
@@ -70,6 +108,9 @@ export default function CounsellorBrief({ brief = {} }) {
           <span className={`severity-pill severity-pill--${String(severityBadge).toLowerCase().replace(/\s+/g, '-')}`}>
             {isPending ? 'GENERATING' : severityBadge}
           </span>
+          <button className="copy-brief-button" type="button" onClick={handleCopyBrief}>
+            {copyStatus}
+          </button>
         </div>
       </header>
 

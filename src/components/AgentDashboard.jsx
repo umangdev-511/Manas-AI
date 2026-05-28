@@ -107,6 +107,10 @@ function formatRouteLabel(routeStatus) {
   return String(routeStatus || 'MONITOR').replace(/_/g, ' ');
 }
 
+function getRiskBadgeClass(riskLevel) {
+  return `risk-badge risk-badge--${String(riskLevel || 'low').toLowerCase()}`;
+}
+
 function getSystemModeCopy(systemMode) {
   const copy = {
     LISTENING: {
@@ -284,7 +288,7 @@ export default function AgentDashboard({
       <section className="decision-strip" aria-label="Current triage decision">
         <div>
           <span>Risk Level</span>
-          <strong style={{ color: riskColor }}>{riskLevel}</strong>
+          <strong className={getRiskBadgeClass(riskLevel)}>{riskLevel}</strong>
         </div>
         <div>
           <span>Current Route</span>
@@ -371,9 +375,19 @@ export default function AgentDashboard({
             </div>
           ) : (
             visibleLog.map((entry) => (
-              <div className="activity-entry" key={entry.id}>
+              <div className={`activity-entry activity-entry--${entry.severity || 'info'}`} key={entry.id}>
                 <time>{formatLogTime(entry.timestamp)}</time>
-                <p>{entry.message}</p>
+                {entry.agent ? (
+                  <div className="activity-entry__content">
+                    <div>
+                      <strong>{entry.agent}</strong>
+                      <span>{entry.action}</span>
+                    </div>
+                    {entry.detail && <p>{entry.detail}</p>}
+                  </div>
+                ) : (
+                  <p>{entry.message}</p>
+                )}
               </div>
             ))
           )}

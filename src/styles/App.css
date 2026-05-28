@@ -23,7 +23,7 @@ input {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(420px, 45%) minmax(480px, 55%);
+  grid-template-columns: minmax(390px, 43%) minmax(520px, 57%);
   width: 100%;
   height: 100vh;
   overflow: hidden;

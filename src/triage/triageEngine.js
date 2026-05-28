@@ -204,7 +204,7 @@ function createCounsellorBrief({
   ];
 
   return {
-    priorityBadge: riskLevel === RISK_LEVELS.CRITICAL ? 'URGENT HANDOFF' : 'HUMAN REVIEW',
+    priorityBadge: riskLevel === RISK_LEVELS.CRITICAL ? 'Immediate Safety Assessment' : 'Human Review',
     severityBadge: riskLevel,
     phq9Score: phqScore,
     gad7Score: gadScore,
@@ -222,7 +222,7 @@ function createCounsellorBrief({
       ],
     recommendedOpener: 'I can see you have been carrying a lot, and I am here with you now. We can take this one step at a time.',
     recommendedImmediateAction: riskLevel === RISK_LEVELS.CRITICAL
-      ? 'Start with immediate safety assessment. Confirm whether the user is alone, has access to means, has a safe person nearby, and needs emergency/crisis support. Do not begin with generic emotional exploration.'
+      ? 'Start with immediate safety assessment. Confirm whether the user is alone, has access to means, has a safe person nearby, and needs emergency or crisis support. Do not begin with generic emotional exploration.'
       : 'Begin with supportive check-in, confirm available support, and assess whether risk signals are increasing.',
     whatNotToDo: [
       'Do not minimize',
@@ -233,7 +233,7 @@ function createCounsellorBrief({
     ],
     handoffSummary: `Manas detected ${keySignals.join(', ') || 'risk signals'} across ${timeline.length} user message${timeline.length === 1 ? '' : 's'}. Current route is ${route}, risk is ${riskLevel}, and escalation is locked until reset. This is a demo triage brief for counsellor preparation, not a diagnosis.`,
     escalationReason: route === ROUTES.URGENT_ESCALATION
-      ? 'Critical risk locked after explicit suicidal intent signal'
+      ? 'Explicit suicidal intent detected in user message.'
       : 'Escalation threshold reached',
     sessionDuration: 'Live session',
     timestamp: 'session-live',
@@ -289,35 +289,78 @@ export function generateAgentEvents(previousState, nextState, message) {
   const latestTimeline = nextState.timeline[nextState.timeline.length - 1];
   const detected = latestTimeline?.detectedEvidence || [];
   const events = [];
+  const detectedText = detected.join(', ').toLowerCase();
+  const severity = nextState.riskLevel === RISK_LEVELS.CRITICAL
+    ? 'critical'
+    : nextState.riskLevel === RISK_LEVELS.HIGH
+      ? 'high'
+      : nextState.riskLevel === RISK_LEVELS.MODERATE
+        ? 'watch'
+        : 'info';
 
   if (detected.length > 0) {
     const hasCrisisSignal = detected.includes('Explicit suicidal intent');
-    events.push(hasCrisisSignal
-      ? 'Samajhna - Crisis signal detected: suicidal intent'
-      : `Samajhna - Detected ${detected.join(', ').toLowerCase()}`);
+    events.push({
+      agent: 'Samajhna',
+      action: hasCrisisSignal ? 'Crisis signal detected' : 'Risk signals updated',
+      detail: hasCrisisSignal ? 'explicit suicidal intent' : detectedText,
+      severity: hasCrisisSignal ? 'critical' : severity,
+    });
   } else {
-    events.push('Samajhna - No new risk evidence detected');
+    events.push({
+      agent: 'Samajhna',
+      action: 'No new risk evidence detected',
+      detail: 'continuing silent monitoring',
+      severity: 'info',
+    });
   }
 
   if (nextState.route === ROUTES.HUMAN_RECOMMENDED) {
-    events.push('Nirdeshak - Human support recommended');
+    events.push({
+      agent: 'Nirdeshak',
+      action: 'Human support recommended',
+      detail: 'hopelessness or worthlessness signals detected',
+      severity: 'high',
+    });
   } else if (nextState.route === ROUTES.URGENT_ESCALATION) {
-    events.push('Nirdeshak - Urgent escalation triggered');
+    events.push({
+      agent: 'Nirdeshak',
+      action: 'Urgent escalation triggered',
+      detail: 'critical risk locked',
+      severity: 'critical',
+    });
   } else {
-    events.push(`Nirdeshak - Route selected: ${nextState.route}`);
+    events.push({
+      agent: 'Nirdeshak',
+      action: `Route selected: ${nextState.route}`,
+      detail: nextState.route === ROUTES.CHECK_IN
+        ? 'early distress indicators detected'
+        : 'monitoring natural conversation',
+      severity,
+    });
   }
 
   if (!previousState.escalationLocked && nextState.escalationLocked) {
-    events.push('Nirdeshak - Escalation lock enabled');
+    events.push({
+      agent: 'Nirdeshak',
+      action: 'Escalation lock enabled',
+      detail: 'risk will not downgrade until reset',
+      severity: 'critical',
+    });
   }
 
   if (!previousState.counsellorBrief && nextState.counsellorBrief) {
-    events.push('Setu - Counsellor brief generated');
+    events.push({
+      agent: 'Setu',
+      action: 'Counsellor brief generated',
+      detail: 'handoff package ready',
+      severity: 'critical',
+    });
   }
 
   return events.map((event, index) => ({
     id: `event-${nextState.timeline.length}-${index}`,
-    message: event,
+    ...event,
     userText: message,
   }));
 }

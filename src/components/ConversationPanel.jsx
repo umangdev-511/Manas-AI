@@ -75,6 +75,39 @@ export default function ConversationPanel({
             </ul>
             <small>Prototype demo only. Not a diagnosis or replacement for emergency care.</small>
           </div>
+
+          <div className="handoff-comparison" aria-label="Cold start versus Manas handoff">
+            <div>
+              <span>Without Manas</span>
+              <ul>
+                <li>Counsellor starts cold</li>
+                <li>User repeats painful context</li>
+                <li>Risk signals may be missed</li>
+                <li>First minutes reconstruct history</li>
+              </ul>
+            </div>
+            <div>
+              <span>With Manas</span>
+              <ul>
+                <li>Risk signals already extracted</li>
+                <li>Escalation reason is clear</li>
+                <li>Safety questions are suggested</li>
+                <li>Counsellor starts with context</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="architecture-strip" aria-label="How Manas works">
+            <strong>How Manas works</strong>
+            <div>
+              <span>User Message</span>
+              <span>Sunna</span>
+              <span>Samajhna</span>
+              <span>Nirdeshak</span>
+              <span>Setu</span>
+            </div>
+            <small>Critical paths are deterministic for safety and demo reliability.</small>
+          </div>
         </section>
 
         {errorMessage && (
