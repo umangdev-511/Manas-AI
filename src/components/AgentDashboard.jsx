@@ -78,6 +78,9 @@ function getGadColor(score) {
 
 function getRiskColor(riskLevel) {
   const colors = {
+    LOW: '#10B981',
+    HIGH: '#EF4444',
+    CRITICAL: '#991B1B',
     MINIMAL: '#10B981',
     MILD: '#FBBF24',
     MODERATE: '#F59E0B',
@@ -86,6 +89,49 @@ function getRiskColor(riskLevel) {
   };
 
   return colors[riskLevel] || '#6B7280';
+}
+
+function formatRouteStatus(routeStatus) {
+  const labels = {
+    MONITOR: 'Monitoring natural conversation',
+    CHECK_IN: 'Check-in recommended; continue signal tracking',
+    HUMAN_RECOMMENDED: 'Human support recommended; monitoring for escalation',
+    URGENT_ESCALATION: 'Critical risk locked; urgent handoff route active',
+    HANDOFF_READY: 'Counsellor brief ready before human joins',
+  };
+
+  return labels[routeStatus] || routeStatus;
+}
+
+function formatRouteLabel(routeStatus) {
+  return String(routeStatus || 'MONITOR').replace(/_/g, ' ');
+}
+
+function getSystemModeCopy(systemMode) {
+  const copy = {
+    LISTENING: {
+      label: 'LISTENING',
+      detail: 'Sunna is receiving natural user input.',
+    },
+    ASSESSING: {
+      label: 'ASSESSING',
+      detail: 'Samajhna is scoring silent risk signals.',
+    },
+    HUMAN_RECOMMENDED: {
+      label: 'HUMAN RECOMMENDED',
+      detail: 'Signals suggest a human counsellor should review if available.',
+    },
+    ESCALATING: {
+      label: 'ESCALATING',
+      detail: 'Nirdeshak has locked the case into an urgent handoff route.',
+    },
+    HANDOFF_READY: {
+      label: 'HANDOFF READY',
+      detail: 'Setu has prepared the counsellor brief.',
+    },
+  };
+
+  return copy[systemMode] || copy.LISTENING;
 }
 
 function ScoreBar({ label, score, maxScore, color }) {
@@ -117,10 +163,20 @@ export default function AgentDashboard({
   phqScore = 0,
   gadScore = 0,
   riskLevel = 'MINIMAL',
+  systemMode = 'LISTENING',
+  detectedEvidence = [],
+  routeStatus = 'Monitoring natural conversation',
+  escalationLocked = false,
   activityLog = [],
   isEscalated = false,
   counsellorBrief = null,
   onResetSession,
+  isJudgeDemoMode = false,
+  onToggleJudgeDemo,
+  demoSteps = [],
+  demoStepIndex = 0,
+  isDemoBusy = false,
+  onDemoStepClick,
   sessionResetKey = 0,
 }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -146,6 +202,11 @@ export default function AgentDashboard({
   const safePhqScore = clampScore(phqScore, 27);
   const safeGadScore = clampScore(gadScore, 21);
   const riskColor = getRiskColor(riskLevel);
+  const systemModeCopy = getSystemModeCopy(systemMode);
+  const currentDemoStep = demoSteps[Math.min(demoStepIndex, Math.max(demoSteps.length - 1, 0))];
+  const demoProgressLabel = currentDemoStep
+    ? `Step ${Math.min(demoStepIndex + 1, demoSteps.length)}/${demoSteps.length} ${currentDemoStep.label}`
+    : 'Demo sequence ready';
 
   return (
     <aside className={`agent-dashboard ${isEscalated ? 'agent-dashboard--escalated' : ''}`}>
@@ -158,17 +219,82 @@ export default function AgentDashboard({
           <time className="session-timer" aria-label="Session timer">
             {formatElapsedTime(elapsedSeconds)}
           </time>
+          <button
+            className={`judge-demo-toggle ${isJudgeDemoMode ? 'judge-demo-toggle--active' : ''}`}
+            type="button"
+            onClick={onToggleJudgeDemo}
+            aria-pressed={isJudgeDemoMode}
+          >
+            Judge Demo
+          </button>
           <button className="reset-session-button" type="button" onClick={onResetSession}>
             Reset
           </button>
         </div>
       </header>
 
+      {isJudgeDemoMode && (
+        <section className="judge-demo-panel" aria-label="Judge demo mode">
+          <div className="judge-demo-panel__header">
+            <span>Guided Demo Mode</span>
+            <strong>{demoProgressLabel}</strong>
+          </div>
+          <div className="judge-demo-steps">
+            {demoSteps.map((step, index) => {
+              const isDone = index < demoStepIndex;
+              const isActive = index === demoStepIndex;
+
+              return (
+                <button
+                  className={`judge-demo-chip ${isDone ? 'judge-demo-chip--done' : ''} ${isActive ? 'judge-demo-chip--active' : ''}`}
+                  type="button"
+                  key={step.message}
+                  onClick={() => onDemoStepClick?.(index)}
+                  disabled={!isActive || isDemoBusy}
+                >
+                  <span>{index + 1}</span>
+                  {step.message}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {isEscalated && (
         <div className="escalation-banner" role="alert">
-          ⚠ ESCALATION TRIGGERED
+          <strong>Urgent safety signal detected.</strong>
+          <span>
+            Manas locked escalation and prepared a counsellor handoff brief. In real deployment, this would trigger the organization's crisis-support protocol.
+          </span>
         </div>
       )}
+
+      <section className={`system-mode-card system-mode-card--${systemMode.toLowerCase().replace('_', '-')}`}>
+        <div>
+          <span>System Mode</span>
+          <strong>{systemModeCopy.label}</strong>
+          <p>{systemModeCopy.detail}</p>
+        </div>
+        <div className="route-chip">
+          {formatRouteStatus(routeStatus)}
+        </div>
+      </section>
+
+      <section className="decision-strip" aria-label="Current triage decision">
+        <div>
+          <span>Risk Level</span>
+          <strong style={{ color: riskColor }}>{riskLevel}</strong>
+        </div>
+        <div>
+          <span>Current Route</span>
+          <strong>{formatRouteLabel(routeStatus)}</strong>
+        </div>
+        <div className={escalationLocked ? 'decision-strip__locked' : ''}>
+          <span>Escalation Lock</span>
+          <strong>{escalationLocked ? 'LOCKED' : 'OPEN'}</strong>
+        </div>
+      </section>
 
       <section className="agent-grid" aria-label="Agent statuses">
         {AGENTS.map((agent) => (
@@ -183,6 +309,11 @@ export default function AgentDashboard({
       </section>
 
       <section className="score-section" aria-label="Clinical score monitor">
+        <div className="score-section__header">
+          <h3>Signal Tracking</h3>
+          <span>Demo signal tracking, not diagnosis.</span>
+        </div>
+
         <ScoreBar
           label="PHQ-9"
           score={safePhqScore}
@@ -197,9 +328,31 @@ export default function AgentDashboard({
         />
 
         <div className="risk-panel">
-          <span>Clinical Risk Assessment</span>
+          <span>Triage Risk Level</span>
           <strong style={{ color: riskColor }}>{riskLevel}</strong>
         </div>
+      </section>
+
+      <section className="evidence-section" aria-label="Detected evidence and route status">
+        <div className="evidence-header">
+          <h3>Detected Evidence</h3>
+          <span>{detectedEvidence.length} signals</span>
+        </div>
+
+        {detectedEvidence.length === 0 ? (
+          <div className="evidence-empty">
+            No risk evidence detected yet. Conversation remains in listening mode.
+          </div>
+        ) : (
+          <div className="evidence-list">
+            {detectedEvidence.slice(0, 5).map((item) => (
+              <div className="evidence-item" key={item.id}>
+                <strong>{item.label}</strong>
+                <span>{item.source}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="activity-section" aria-label="Agent activity log">

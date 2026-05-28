@@ -10,10 +10,10 @@
 
 .conversation-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
-  padding: 20px 24px 18px;
+  padding: 18px 24px 16px;
   border-bottom: 1px solid #E5E7EB;
   flex: 0 0 auto;
 }
@@ -28,10 +28,20 @@
 }
 
 .conversation-brand p {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   color: #6B7280;
   font-size: 14px;
   line-height: 1.2;
+}
+
+.conversation-brand span {
+  display: block;
+  max-width: 420px;
+  margin-top: 8px;
+  color: #4B5563;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .session-status {
@@ -83,6 +93,72 @@
   font-style: italic;
   line-height: 1.6;
   text-align: center;
+}
+
+.product-positioning {
+  margin-bottom: 24px;
+}
+
+.product-punchline {
+  max-width: 680px;
+  margin: 0;
+  color: #374151;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.positioning-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.positioning-badges span {
+  border: 1px solid #D5DEE8;
+  border-radius: 999px;
+  background: #FFFFFF;
+  color: #2563A5;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  padding: 7px 10px;
+}
+
+.why-card {
+  margin-top: 14px;
+  border: 1px solid #E5E7EB;
+  border-left: 4px solid #4A90D9;
+  border-radius: 12px;
+  background: #FFFFFF;
+  color: #374151;
+  padding: 14px 15px;
+}
+
+.why-card strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.why-card ul {
+  margin: 10px 0;
+  padding-left: 18px;
+  color: #4B5563;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.why-card li + li {
+  margin-top: 5px;
+}
+
+.why-card small {
+  color: #9CA3AF;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .conversation-error {
@@ -293,6 +369,10 @@
 
   .message-bubble {
     max-width: 86%;
+  }
+
+  .product-positioning {
+    margin-bottom: 20px;
   }
 
   .message-composer {

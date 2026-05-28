@@ -1,45 +1,41 @@
-function getRiskLevel(phqScore, gadScore, crisisKeywordFound = false) {
-  if (crisisKeywordFound || phqScore >= 20) return 'SEVERE';
-  if (phqScore >= 15 || gadScore >= 15) return 'MODERATE-SEVERE';
-  if (phqScore >= 10 || gadScore >= 10) return 'MODERATE';
-  if (phqScore >= 5 || gadScore >= 5) return 'MILD';
-  return 'MINIMAL';
-}
+import { ROUTES } from '../triage/triageEngine.js';
 
 export function routeCase({
   phqScore = 0,
   gadScore = 0,
   crisisKeywordFound = false,
 }) {
-  const riskLevel = getRiskLevel(phqScore, gadScore, crisisKeywordFound);
-
   if (crisisKeywordFound) {
     return {
       shouldEscalate: true,
-      reason: 'Crisis keyword detected',
-      riskLevel,
+      reason: 'Critical risk locked after explicit crisis signal',
+      riskLevel: 'CRITICAL',
+      route: ROUTES.URGENT_ESCALATION,
     };
   }
 
-  if (phqScore >= 15) {
+  if (phqScore >= 8) {
     return {
-      shouldEscalate: true,
-      reason: `PHQ-9 score exceeded threshold (${phqScore}/27)`,
-      riskLevel,
+      shouldEscalate: false,
+      reason: 'Human support recommended by central triage engine',
+      riskLevel: 'HIGH',
+      route: ROUTES.HUMAN_RECOMMENDED,
     };
   }
 
-  if (gadScore >= 15) {
+  if (phqScore >= 5 || gadScore >= 6) {
     return {
-      shouldEscalate: true,
-      reason: `GAD-7 score exceeded threshold (${gadScore}/21)`,
-      riskLevel,
+      shouldEscalate: false,
+      reason: 'Check-in route recommended by central triage engine',
+      riskLevel: 'MODERATE',
+      route: ROUTES.CHECK_IN,
     };
   }
 
   return {
     shouldEscalate: false,
-    reason: 'Threshold check — monitoring',
-    riskLevel,
+    reason: 'Monitoring route recommended by central triage engine',
+    riskLevel: 'LOW',
+    route: ROUTES.MONITOR,
   };
 }
