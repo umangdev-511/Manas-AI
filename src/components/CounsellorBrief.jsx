@@ -37,11 +37,14 @@ function ListBlock({ title, items = [], ordered = false }) {
 export default function CounsellorBrief({ brief = {} }) {
   const [copyStatus, setCopyStatus] = useState('Copy Brief');
   const {
+    packetTitle = 'Counsellor Handoff Packet',
     priorityBadge = 'HANDOFF READY',
     severityBadge = 'PENDING',
     phq9Score = 0,
     gad7Score = 0,
     riskLevel = 'Pending',
+    route = '',
+    escalationLock = '',
     keySignals = brief.keyTriggers || [],
     conversationTimeline = [],
     conversationSummary = [],
@@ -49,6 +52,7 @@ export default function CounsellorBrief({ brief = {} }) {
     recommendedImmediateAction = '',
     whatNotToDo = [],
     handoffSummary = '',
+    status = 'Ready for human counsellor review',
     escalationReason = '',
     timestamp,
     isPending = false,
@@ -60,6 +64,8 @@ export default function CounsellorBrief({ brief = {} }) {
     : conversationSummary;
   const briefText = useMemo(() => [
     `Priority: ${priorityBadge}`,
+    route && `Route: ${route}`,
+    escalationLock && `Escalation Lock: ${escalationLock}`,
     `Risk: ${riskLevel}`,
     `Escalation reason: ${escalationReason}`,
     `Scores: PHQ-style ${phq9Score}/27, GAD-style ${gad7Score}/21`,
@@ -71,9 +77,12 @@ export default function CounsellorBrief({ brief = {} }) {
     `Recommended immediate action: ${recommendedImmediateAction}`,
     `What not to do: ${whatNotToDo.join('; ')}`,
     `Handoff summary: ${handoffSummary}`,
+    `Status: ${status}`,
   ].filter(Boolean).join('\n'), [
     priorityBadge,
     riskLevel,
+    route,
+    escalationLock,
     escalationReason,
     phq9Score,
     gad7Score,
@@ -83,6 +92,7 @@ export default function CounsellorBrief({ brief = {} }) {
     recommendedImmediateAction,
     whatNotToDo,
     handoffSummary,
+    status,
   ]);
 
   const handleCopyBrief = async () => {
@@ -100,7 +110,7 @@ export default function CounsellorBrief({ brief = {} }) {
     <section className="brief-card" aria-label="Counsellor brief">
       <header className="brief-card__header">
         <div>
-          <h3>Setu Counsellor Brief</h3>
+          <h3>{packetTitle}</h3>
           <time>{formatBriefTimestamp(timestamp)}</time>
         </div>
         <div className="brief-priority-stack">
@@ -115,6 +125,21 @@ export default function CounsellorBrief({ brief = {} }) {
       </header>
 
       <div className="brief-scores brief-scores--three">
+        <div>
+          <span>Priority</span>
+          <strong>{priorityBadge}</strong>
+        </div>
+        <div>
+          <span>Route</span>
+          <strong>{route || 'Pending'}</strong>
+        </div>
+        <div>
+          <span>Escalation Lock</span>
+          <strong>{escalationLock || 'Inactive'}</strong>
+        </div>
+      </div>
+
+      <div className="brief-scores brief-scores--three brief-scores--compact">
         <div>
           <span>Risk Level</span>
           <strong>{riskLevel}</strong>
@@ -149,6 +174,13 @@ export default function CounsellorBrief({ brief = {} }) {
         </div>
       )}
 
+      {handoffSummary && (
+        <div className="brief-block">
+          <h4>Conversation Summary</h4>
+          <p className="handoff-summary">{handoffSummary}</p>
+        </div>
+      )}
+
       <ListBlock title="Conversation Timeline" items={timelineItems} ordered />
       <ListBlock title="Suggested First Questions" items={suggestedFirstQuestions} ordered />
 
@@ -159,14 +191,12 @@ export default function CounsellorBrief({ brief = {} }) {
         </div>
       )}
 
-      <ListBlock title="What Not To Do" items={whatNotToDo} />
+      <ListBlock title="Do Not" items={whatNotToDo} />
 
-      {handoffSummary && (
-        <div className="brief-block">
-          <h4>Handoff Summary</h4>
-          <p className="handoff-summary">{handoffSummary}</p>
-        </div>
-      )}
+      <div className="brief-status">
+        <span>Status</span>
+        <strong>{status}</strong>
+      </div>
 
       <p className="brief-disclaimer">
         AI-generated triage summary. For clinical decision support only. Not a diagnosis.

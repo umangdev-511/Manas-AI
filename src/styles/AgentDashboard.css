@@ -873,6 +873,10 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.brief-scores--compact {
+  margin-top: -4px;
+}
+
 .brief-scores div {
   border: 1px solid #262B38;
   border-radius: 8px;
@@ -989,6 +993,31 @@
   font-size: 11px;
   line-height: 1.45;
   padding-top: 10px;
+}
+
+.brief-status {
+  margin-top: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.08);
+  padding: 10px 11px;
+}
+
+.brief-status span {
+  display: block;
+  color: #6EE7B7;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.brief-status strong {
+  display: block;
+  margin-top: 4px;
+  color: #D1FAE5;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 @keyframes agentPulse {

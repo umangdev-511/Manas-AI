@@ -183,7 +183,9 @@ function createCounsellorBrief({
   timeline,
 }) {
   const latestEvidence = evidence.slice(0, 8);
-  const keySignals = latestEvidence.map((item) => item.label);
+  const keySignals = latestEvidence.map((item) => (
+    item.category === 'suicidal_intent' ? 'Suicidal intent' : item.label
+  ));
   const conversationTimeline = timeline.map((item, index) => ({
     step: index + 1,
     userText: item.userText,
@@ -195,6 +197,10 @@ function createCounsellorBrief({
     const evidenceText = item.detectedEvidence.join(', ') || 'no new signal';
     return `Message ${item.step}: ${evidenceText}; risk ${item.riskAfterMessage}; route ${item.routeAfterMessage}.`;
   });
+  const hasCriticalIntent = keySignals.includes('Suicidal intent');
+  const handoffSummary = hasCriticalIntent
+    ? 'The user first reported low mood and tiredness, then described isolation. They later expressed hopelessness and worthlessness. The latest message included explicit suicidal intent.'
+    : `Manas detected ${keySignals.join(', ') || 'risk signals'} across ${timeline.length} user message${timeline.length === 1 ? '' : 's'}. Current route is ${route}, risk is ${riskLevel}, and escalation is locked until reset.`;
   const criticalQuestions = [
     'Are you alone right now?',
     'Do you have a plan or means to harm yourself?',
@@ -204,11 +210,14 @@ function createCounsellorBrief({
   ];
 
   return {
+    packetTitle: 'Counsellor Handoff Packet',
     priorityBadge: riskLevel === RISK_LEVELS.CRITICAL ? 'Immediate Safety Assessment' : 'Human Review',
     severityBadge: riskLevel,
     phq9Score: phqScore,
     gad7Score: gadScore,
     riskLevel: riskLevel === RISK_LEVELS.CRITICAL ? 'Critical' : 'High',
+    route: route === ROUTES.URGENT_ESCALATION ? 'Urgent Escalation' : route,
+    escalationLock: route === ROUTES.URGENT_ESCALATION ? 'Active' : 'Inactive',
     keyTriggers: keySignals,
     keySignals,
     conversationTimeline,
@@ -227,11 +236,11 @@ function createCounsellorBrief({
     whatNotToDo: [
       'Do not minimize',
       'Do not diagnose',
-      'Do not give generic motivation',
-      'Do not overpromise confidentiality in crisis',
+      'Do not begin with generic motivation',
       'Do not delay safety assessment',
     ],
-    handoffSummary: `Manas detected ${keySignals.join(', ') || 'risk signals'} across ${timeline.length} user message${timeline.length === 1 ? '' : 's'}. Current route is ${route}, risk is ${riskLevel}, and escalation is locked until reset. This is a demo triage brief for counsellor preparation, not a diagnosis.`,
+    handoffSummary,
+    status: 'Ready for human counsellor review',
     escalationReason: route === ROUTES.URGENT_ESCALATION
       ? 'Explicit suicidal intent detected in user message.'
       : 'Escalation threshold reached',
