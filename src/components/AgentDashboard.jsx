@@ -97,10 +97,23 @@ function formatRouteStatus(routeStatus) {
     CHECK_IN: 'Check-in recommended; continue signal tracking',
     HUMAN_RECOMMENDED: 'Human support recommended; monitoring for escalation',
     URGENT_ESCALATION: 'Critical risk locked; urgent handoff route active',
+    EMERGENCY_PROTOCOL_RECOMMENDED: 'Immediate danger indicators; emergency protocol recommended',
     HANDOFF_READY: 'Counsellor brief ready before human joins',
   };
 
   return labels[routeStatus] || routeStatus;
+}
+
+function getRouteExplanation(routeStatus) {
+  const explanations = {
+    MONITOR: 'Mild distress indicators detected. Manas continues supportive intake.',
+    CHECK_IN: 'Multiple distress or isolation signals detected. Manas asks targeted check-in questions.',
+    HUMAN_RECOMMENDED: 'Hopelessness, worthlessness, or self-harm signals detected. Human review is recommended.',
+    URGENT_ESCALATION: 'Explicit suicidal intent detected. Manas locked escalation and created an urgent crisis case.',
+    EMERGENCY_PROTOCOL_RECOMMENDED: 'User may have immediate access to means or unsafe location. Manas recommends emergency protocol.',
+  };
+
+  return explanations[routeStatus] || explanations.MONITOR;
 }
 
 function formatRouteLabel(routeStatus) {
@@ -162,6 +175,156 @@ function ScoreBar({ label, score, maxScore, color }) {
   );
 }
 
+function buildPortalCopy(portalCase, counsellorBrief) {
+  if (!portalCase) return '';
+
+  const lines = [
+    `Case ID: ${portalCase.caseId}`,
+    `Status: ${portalCase.status}`,
+    `Priority: ${portalCase.priority}`,
+    `Route: ${portalCase.route}`,
+    `Assigned queue: ${portalCase.assignedQueue}`,
+    `Escalation reason: ${portalCase.escalationReason}`,
+    `Evidence: ${portalCase.evidence.join(', ')}`,
+    'Safety checklist:',
+    ...portalCase.safetyChecklist.map((item) => `- ${item}`),
+  ];
+
+  if (counsellorBrief?.handoffSummary) {
+    lines.push(`Handoff summary: ${counsellorBrief.handoffSummary}`);
+  }
+
+  return lines.join('\n');
+}
+
+function CrisisDeskPortal({
+  portalCase,
+  routeStatus,
+  riskLevel,
+  escalationLocked,
+  counsellorBrief,
+  onMarkCaseReviewed,
+  onStartSafetyAssessment,
+  onSimulateHumanHandoff,
+}) {
+  const [copyStatus, setCopyStatus] = useState('Copy Handoff Packet');
+  const fallbackStatus = routeStatus === 'CHECK_IN' ? 'Monitoring' : 'No case created';
+  const fallbackAction = routeStatus === 'CHECK_IN' ? 'Ask targeted follow-up questions' : 'Continue supportive intake';
+  const status = portalCase?.status || fallbackStatus;
+  const portalAction = portalCase?.action || fallbackAction;
+  const priority = portalCase?.priority || riskLevel;
+  const queue = portalCase?.assignedQueue || 'No queue assigned';
+  const packetStatus = portalCase?.handoffPacket || 'No packet generated';
+  const routeExplanation = portalCase?.routeExplanation || getRouteExplanation(routeStatus);
+  const checklist = portalCase?.safetyChecklist || [];
+
+  const handleCopy = async () => {
+    if (!portalCase) return;
+
+    try {
+      await navigator.clipboard.writeText(buildPortalCopy(portalCase, counsellorBrief));
+      setCopyStatus('Copied');
+      window.setTimeout(() => setCopyStatus('Copy Handoff Packet'), 1400);
+    } catch {
+      setCopyStatus('Copy failed');
+      window.setTimeout(() => setCopyStatus('Copy Handoff Packet'), 1400);
+    }
+  };
+
+  return (
+    <section className={`portal-card ${portalCase ? 'portal-card--active' : ''} portal-card--${String(priority).toLowerCase()}`} aria-label="Crisis Desk Portal">
+      <header className="portal-card__header">
+        <div>
+          <h3>Crisis Desk Portal</h3>
+          <p>Simulated for demo. No real dispatch or emergency contact occurs.</p>
+        </div>
+        <span className="portal-priority">{priority}</span>
+      </header>
+
+      <div className="portal-grid">
+        <div>
+          <span>Case ID</span>
+          <strong>{portalCase?.caseId || 'Not created'}</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong>{status}</strong>
+        </div>
+        <div>
+          <span>Route</span>
+          <strong>{formatRouteLabel(portalCase?.route || routeStatus)}</strong>
+        </div>
+        <div>
+          <span>Escalation Lock</span>
+          <strong>{escalationLocked ? 'Active' : 'Inactive'}</strong>
+        </div>
+        <div>
+          <span>Assigned Queue</span>
+          <strong>{queue}</strong>
+        </div>
+        <div>
+          <span>Handoff Packet</span>
+          <strong>{packetStatus}</strong>
+        </div>
+        <div className="portal-grid__wide">
+          <span>Recommended Action</span>
+          <strong>{portalAction}</strong>
+        </div>
+      </div>
+
+      <div className="portal-route-reason">
+        <span>Why this route?</span>
+        <p>{routeExplanation}</p>
+      </div>
+
+      {portalCase?.escalationReason && (
+        <div className="portal-route-reason portal-route-reason--alert">
+          <span>Escalation Reason</span>
+          <p>{portalCase.escalationReason}</p>
+        </div>
+      )}
+
+      {checklist.length > 0 && (
+        <div className="portal-checklist">
+          <span>Safety Checklist</span>
+          {checklist.map((item) => (
+            <label key={item}>
+              <input type="checkbox" readOnly />
+              {item}
+            </label>
+          ))}
+        </div>
+      )}
+
+      {portalCase?.safetyAssessmentStarted && (
+        <div className="portal-active-question">
+          <span>First safety assessment prompt</span>
+          <strong>{portalCase.activeSafetyQuestion}</strong>
+        </div>
+      )}
+
+      <div className="portal-actions">
+        <button type="button" onClick={onMarkCaseReviewed} disabled={!portalCase || portalCase.reviewed}>
+          Mark Reviewed
+        </button>
+        <button type="button" onClick={onStartSafetyAssessment} disabled={!portalCase}>
+          Start Safety Assessment
+        </button>
+        <button type="button" onClick={handleCopy} disabled={!portalCase}>
+          {copyStatus}
+        </button>
+        <button type="button" onClick={onSimulateHumanHandoff} disabled={!portalCase || portalCase.handoffSimulated}>
+          Simulate Human Handoff
+        </button>
+      </div>
+
+      <p className="portal-disclaimer">
+        Prototype demo only. Not a diagnosis or replacement for emergency care. In real deployment, escalation would follow the organization&apos;s trained crisis-support protocol.
+      </p>
+    </section>
+  );
+}
+
 export default function AgentDashboard({
   agentStatuses = DEFAULT_STATUSES,
   phqScore = 0,
@@ -174,6 +337,10 @@ export default function AgentDashboard({
   activityLog = [],
   isEscalated = false,
   counsellorBrief = null,
+  portalCase = null,
+  onMarkCaseReviewed,
+  onStartSafetyAssessment,
+  onSimulateHumanHandoff,
   onResetSession,
   isJudgeDemoMode = false,
   onToggleJudgeDemo,
@@ -299,6 +466,17 @@ export default function AgentDashboard({
           <strong>{escalationLocked ? 'LOCKED' : 'OPEN'}</strong>
         </div>
       </section>
+
+      <CrisisDeskPortal
+        portalCase={portalCase}
+        routeStatus={routeStatus}
+        riskLevel={riskLevel}
+        escalationLocked={escalationLocked}
+        counsellorBrief={counsellorBrief}
+        onMarkCaseReviewed={onMarkCaseReviewed}
+        onStartSafetyAssessment={onStartSafetyAssessment}
+        onSimulateHumanHandoff={onSimulateHumanHandoff}
+      />
 
       <section className="agent-grid" aria-label="Agent statuses">
         {AGENTS.map((agent) => (

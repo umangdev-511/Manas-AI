@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './styles/App.css';
 
+import LandingScreen from './components/LandingScreen.jsx';
 import ConversationPanel from './components/ConversationPanel.jsx';
 import AgentDashboard from './components/AgentDashboard.jsx';
 
@@ -47,7 +48,12 @@ function wait(ms) {
   });
 }
 
+function getLastManasMessage(messages) {
+  return [...messages].reverse().find((message) => message.role === 'manas')?.content || '';
+}
+
 export default function App() {
+  const [showLanding, setShowLanding] = useState(true);
   const [messages, setMessages] = useState([]);
   const [agentStatuses, setAgentStatuses] = useState(INITIAL_AGENT_STATUSES);
   const [triageState, setTriageState] = useState(getInitialTriageState);
@@ -105,6 +111,50 @@ export default function App() {
     setIsJudgeDemoMode((currentValue) => !currentValue);
   };
 
+  const handleEnterDemo = () => {
+    setShowLanding(false);
+  };
+
+  const handleEnterJudgeDemo = () => {
+    setShowLanding(false);
+    setIsJudgeDemoMode(true);
+  };
+
+  const updatePortalCase = (updater) => {
+    setTriageState((currentState) => {
+      if (!currentState.portalCase) return currentState;
+
+      return {
+        ...currentState,
+        portalCase: updater(currentState.portalCase),
+      };
+    });
+  };
+
+  const handleMarkCaseReviewed = () => {
+    updatePortalCase((portalCase) => ({
+      ...portalCase,
+      reviewed: true,
+      status: portalCase.status.includes('Reviewed') ? portalCase.status : `${portalCase.status} - Reviewed`,
+    }));
+  };
+
+  const handleStartSafetyAssessment = () => {
+    updatePortalCase((portalCase) => ({
+      ...portalCase,
+      safetyAssessmentStarted: true,
+      activeSafetyQuestion: portalCase.safetyChecklist?.[0] || 'What feels most urgent right now?',
+    }));
+  };
+
+  const handleSimulateHumanHandoff = () => {
+    updatePortalCase((portalCase) => ({
+      ...portalCase,
+      handoffSimulated: true,
+      status: 'Human Handoff Simulated',
+    }));
+  };
+
   const handleJudgeDemoStep = (stepIndex) => {
     if (isSunnaLoading || stepIndex !== judgeDemoStepIndex) return;
 
@@ -126,26 +176,37 @@ export default function App() {
     setIsSunnaLoading(true);
     setConversationError('');
 
-    setAgentStatus('sunna', 'LISTENING');
-    addActivity({
-      agent: 'Sunna',
-      action: 'Intake response generated',
-      detail: 'warm user-facing reply prepared',
-      severity: 'info',
-    });
-
-    const sunnaPromise = Promise.all([
-      getSunnaResponse(conversationForAgents),
-      wait(650),
-    ]).then(([responseText]) => responseText);
-
     // Samajhna runs immediately and independently from Sunna's response cycle.
     setAgentStatus('samajhna', 'SCORING');
 
     const previousTriageState = triageState;
-    const nextTriageState = analyzeMessage(messageText, previousTriageState);
+    const nextTriageState = analyzeMessage(messageText, previousTriageState, {
+      previousAssistantMessage: getLastManasMessage(messages),
+    });
     setTriageState(nextTriageState);
     addActivities(nextTriageState.agentEvents);
+
+    setAgentStatus('sunna', 'LISTENING');
+    addActivity({
+      agent: 'Sunna',
+      action: 'Guarded response selected',
+      detail: `${nextTriageState.riskLevel} risk context`,
+      severity: nextTriageState.riskLevel === 'CRITICAL' ? 'critical' : nextTriageState.riskLevel === 'HIGH' ? 'high' : 'info',
+    });
+
+    const sunnaPromise = Promise.all([
+      getSunnaResponse(conversationForAgents, {
+        detectedEvidence: nextTriageState.evidence,
+        currentEvidence: nextTriageState.timeline[nextTriageState.timeline.length - 1]?.detectedEvidence.map((label) => (
+          nextTriageState.evidence.find((item) => item.label === label) || { label }
+        )),
+        riskLevel: nextTriageState.riskLevel,
+        route: nextTriageState.route,
+        escalationLocked: nextTriageState.escalationLocked,
+        languageMode: 'english',
+      }),
+      wait(650),
+    ]).then(([responseText]) => responseText);
 
     setAgentStatus('samajhna', 'COMPLETE');
 
@@ -203,7 +264,12 @@ export default function App() {
     }
   };
 
-  return (
+  return showLanding ? (
+    <LandingScreen
+      onEnterDemo={handleEnterDemo}
+      onEnterJudgeDemo={handleEnterJudgeDemo}
+    />
+  ) : (
     <main className="app-shell">
       <section className="app-shell__conversation">
         <ConversationPanel
@@ -227,6 +293,10 @@ export default function App() {
           activityLog={activityLog}
           isEscalated={isEscalated}
           counsellorBrief={triageState.counsellorBrief}
+          portalCase={triageState.portalCase}
+          onMarkCaseReviewed={handleMarkCaseReviewed}
+          onStartSafetyAssessment={handleStartSafetyAssessment}
+          onSimulateHumanHandoff={handleSimulateHumanHandoff}
           onResetSession={handleResetSession}
           isJudgeDemoMode={isJudgeDemoMode}
           onToggleJudgeDemo={handleToggleJudgeDemo}

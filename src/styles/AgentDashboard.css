@@ -339,6 +339,7 @@
 .score-section,
 .system-mode-card,
 .decision-strip,
+.portal-card,
 .evidence-section,
 .activity-section,
 .brief-card {
@@ -468,6 +469,213 @@
 
 .decision-strip__locked strong {
   color: #FCA5A5;
+}
+
+.portal-card {
+  padding: 13px;
+}
+
+.portal-card--active {
+  border-color: rgba(74, 144, 217, 0.45);
+}
+
+.portal-card--critical,
+.portal-card--immediate_danger {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.07);
+}
+
+.portal-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 11px;
+}
+
+.portal-card__header h3 {
+  margin: 0;
+  color: #F9FAFB;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.portal-card__header p {
+  margin: 5px 0 0;
+  color: #7A8391;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.portal-priority {
+  border: 1px solid rgba(107, 114, 128, 0.45);
+  border-radius: 999px;
+  background: rgba(107, 114, 128, 0.14);
+  color: #D1D5DB;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  padding: 6px 8px;
+  text-transform: uppercase;
+}
+
+.portal-card--high .portal-priority {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.14);
+  color: #FCD34D;
+}
+
+.portal-card--critical .portal-priority,
+.portal-card--immediate_danger .portal-priority {
+  border-color: rgba(239, 68, 68, 0.65);
+  background: rgba(239, 68, 68, 0.18);
+  color: #FECACA;
+}
+
+.portal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.portal-grid div,
+.portal-route-reason,
+.portal-active-question {
+  border: 1px solid #262B38;
+  border-radius: 8px;
+  background: #0E121A;
+  padding: 10px;
+}
+
+.portal-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.portal-grid span,
+.portal-route-reason span,
+.portal-checklist > span,
+.portal-active-question span {
+  display: block;
+  color: #6B7280;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.portal-grid strong,
+.portal-active-question strong {
+  display: block;
+  margin-top: 5px;
+  color: #F9FAFB;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.portal-route-reason {
+  margin-top: 9px;
+}
+
+.portal-route-reason p {
+  margin: 6px 0 0;
+  color: #C7CED9;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.portal-route-reason--alert {
+  border-color: rgba(239, 68, 68, 0.45);
+  border-left: 3px solid #EF4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.portal-route-reason--alert p {
+  color: #FECACA;
+}
+
+.portal-checklist {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.portal-checklist label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #262B38;
+  border-radius: 8px;
+  background: #0E121A;
+  color: #D1D5DB;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+  padding: 8px 10px;
+}
+
+.portal-checklist input {
+  width: 13px;
+  height: 13px;
+  accent-color: #EF4444;
+  flex: 0 0 auto;
+}
+
+.portal-active-question {
+  margin-top: 10px;
+  border-color: rgba(74, 144, 217, 0.5);
+  background: rgba(74, 144, 217, 0.08);
+}
+
+.portal-active-question strong {
+  color: #DBEAFE;
+}
+
+.portal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.portal-actions button {
+  border: 1px solid #334155;
+  border-radius: 999px;
+  background: #111827;
+  color: #CBD5E1;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  padding: 7px 9px;
+  text-transform: uppercase;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.portal-actions button:hover:not(:disabled) {
+  border-color: #4A90D9;
+  background: rgba(74, 144, 217, 0.12);
+  color: #FFFFFF;
+}
+
+.portal-actions button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.portal-disclaimer {
+  margin: 11px 0 0;
+  border-top: 1px solid #262B38;
+  color: #6B7280;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  padding-top: 10px;
 }
 
 .score-section {
@@ -1082,6 +1290,7 @@
   }
 
   .decision-strip,
+  .portal-grid,
   .brief-scores--three {
     grid-template-columns: 1fr;
   }
@@ -1118,6 +1327,7 @@
   }
 
   .judge-demo-panel,
+  .portal-card,
   .score-section,
   .evidence-section,
   .activity-section,
