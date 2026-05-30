@@ -11,7 +11,41 @@ const RESPONSE_TYPES = {
   CRISIS_ESCALATION: 'crisis_escalation',
 };
 
-const CRISIS_RESPONSE = 'My friend, I am really concerned about your safety right now, and this moment is urgent. I am glad you told me instead of carrying this alone. We do not need to solve everything - we only need to keep you safe. Please move away from anything you could use to hurt yourself and try to stay near another person if possible. Are you alone right now?';
+const SUNNA_SYSTEM_PROMPT = `
+You are Sunna, the user-facing listener in Manas.
+Manas is autonomous mental-health triage and counsellor handoff infrastructure. Sunna is not a therapist, doctor, diagnosis tool, emergency service, or motivational chatbot.
+
+Core behavior:
+- Always acknowledge the specific emotion, image, or fact the user just gave.
+- Never answer with generic support unless it is tied to what the user said.
+- Mirror the user's energy. If they are slow and heavy, be slow and grounded.
+- Reference earlier conversation naturally when it matters.
+- Ask questions like a caring human, not a checklist.
+- Ask at most one question.
+- Short user responses get short Sunna responses.
+- If the previous Sunna message asked a question and the user gives a short answer, respond with a statement first. Add one question only when it feels natural.
+- Do not diagnose or use clinical labels with the user.
+- Do not claim real emergency help was contacted.
+
+Never use these phrases:
+"absolutely", "certainly", "of course", "I understand", "that must be hard", "I am sorry to hear that".
+
+Good response examples:
+- "Two weeks of not sleeping - that is its own kind of exhaustion. What does a normal day look like for you right now?"
+- "Losing interest in things you used to love is one of the hardest parts. When did you last feel even a little like yourself?"
+- "That feeling of nothing mattering - is it everything, or are there moments where it lifts even slightly?"
+- "The not sleeping and feeling alone together can make the day feel unreal. Do those two feel connected for you?"
+- "That is a lot to hold quietly. Have thoughts of harming yourself come up?"
+
+Bad response examples:
+- "I understand how you feel."
+- "That must be really hard for you."
+- "I am here to support you."
+- "Thank you for sharing that with me."
+- "It sounds like you are going through a difficult time."
+`;
+
+const CRISIS_RESPONSE = 'I am really concerned about your safety right now, and this moment is urgent. I am glad you told me instead of carrying this alone. We do not need to solve everything - we only need to keep you safe. Please move away from anything you could use to hurt yourself and try to stay near another person if possible. Are you alone right now?';
 
 const PATTERNS = {
   crisis: /(suicide|suicidal|want to die|end my life|kill myself|don't want to live|no point living|can't go on|better off dead)/i,
@@ -19,14 +53,18 @@ const PATTERNS = {
   actionRequest: /(what should i do|what can i do|help me|tell me what to do|yes|ok|okay)/i,
   eating: /(can't eat|cannot eat|not able to eat|unable to eat|no appetite|haven't eaten|have not eaten|not eating)/i,
   illness: /(sick|unwell|ill|fever|body pain|not feeling well|physically)/i,
-  sleep: /(can't sleep|cannot sleep|insomnia|sleep|tired|tiring|exhausted|no energy|fatigue|drained)/i,
+  sleep: /(can't sleep|cannot sleep|not slept|slept|insomnia|sleep|tired|tiring|exhausted|no energy|fatigue|drained)/i,
+  anhedonia: /(empty|nothing excites|lost interest|losing interest|no interest|don't enjoy|cannot enjoy|feel like myself)/i,
   anxiety: /(anxious|anxiety|worried|worry|nervous|panic|panicking|out of control|overwhelmed|scared|fear)/i,
   academic: /(exam|marks|result|fail|failed|study|studies|college|school|career|placement|rank)/i,
   isolation: /(alone|lonely|isolated|no one|withdrawn|no one to share)/i,
-  hopeless: /(hopeless|worthless|useless|no hope|nothing matters|burden|failure)/i,
+  hopeless: /(hopeless|worthless|useless|no hope|nothing matters|burden|failure|do not see the point|don't see the point|no point anymore)/i,
   lowMood: /(low|sad|down|depressed|not okay)/i,
-  affirmative: /^(yes|yeah|yep|haan|ha|ok|okay|i have|i do|sometimes|a little|kind of)$/i,
+  affirmative: /^(yes|yeah|yep|haan|ha|ok|okay|i have|i do)$/i,
   negative: /^(no|nope|not really|i don't|i do not)$/i,
+  uncertain: /^(maybe|kind of|i guess|a little|sort of)$/i,
+  unknown: /^(i don't know|i do not know|idk|don't know|not sure)$/i,
+  oneWordFeeling: /^(tired|sad|fine|okay|empty|alone|scared|angry|numb)$/i,
   hindi: /[\u0900-\u097F]/,
   hinglish: /\b(haan|nahi|nhi|darr|akela|akeli|thak|pareshan|tension|zindagi|marna|jeena|dost|ghar)\b/i,
 };
@@ -73,6 +111,26 @@ function hasEvidence(context, category) {
   return getEvidenceCategories(context.detectedEvidence).includes(category);
 }
 
+function getUserMessages(conversationHistory) {
+  return conversationHistory.filter((message) => message.role === 'user').map((message) => message.content);
+}
+
+function hasEarlierSignal(conversationHistory, pattern) {
+  return getUserMessages(conversationHistory).slice(0, -1).some((message) => pattern.test(message));
+}
+
+function getConversationMemory(conversationHistory, context = {}) {
+  const categories = getEvidenceCategories(context.detectedEvidence);
+
+  return {
+    sleep: categories.includes('sleep_disturbance') || categories.includes('fatigue') || hasEarlierSignal(conversationHistory, PATTERNS.sleep),
+    loneliness: categories.includes('isolation') || hasEarlierSignal(conversationHistory, PATTERNS.isolation),
+    anhedonia: categories.includes('loss_of_interest') || hasEarlierSignal(conversationHistory, PATTERNS.anhedonia),
+    hopelessness: categories.includes('hopelessness') || hasEarlierSignal(conversationHistory, PATTERNS.hopeless),
+    worthlessness: categories.includes('worthlessness') || hasEarlierSignal(conversationHistory, /worthless|useless|burden/i),
+  };
+}
+
 function inferRiskLevel(userMessage, context = {}) {
   if (context.escalationLocked || context.riskLevel === 'CRITICAL' || PATTERNS.crisis.test(userMessage)) {
     return 'CRITICAL';
@@ -93,8 +151,10 @@ function inferRiskLevel(userMessage, context = {}) {
     || hasEvidence(context, 'isolation')
     || hasEvidence(context, 'fatigue')
     || hasEvidence(context, 'sleep_disturbance')
+    || hasEvidence(context, 'loss_of_interest')
     || PATTERNS.isolation.test(userMessage)
     || PATTERNS.sleep.test(userMessage)
+    || PATTERNS.anhedonia.test(userMessage)
     || PATTERNS.anxiety.test(userMessage)
   ) {
     return 'MODERATE';
@@ -122,30 +182,58 @@ function getContextualResponse(userMessage, previousManasMessage, riskLevel) {
 
   if (PATTERNS.affirmative.test(normalizedMessage)) {
     if (previous.includes('thoughts of harming yourself')) {
-      return 'Thank you for answering honestly. I am going to treat thoughts of harming yourself as important, not as something to brush aside. Are these thoughts present right now?';
+      return 'That yes matters. I am going to treat thoughts of harming yourself as important, not something to brush aside. Are these thoughts present right now?';
     }
 
     if (previous.includes('are you alone right now')) {
-      return 'My friend, I am still concerned because this is urgent and you are alone. Please move away from anything you could use to hurt yourself, then call someone trusted and keep them on the phone. Who can you contact right now?';
+      return 'I am still concerned because this is urgent and you are alone. Please move away from anything you could use to hurt yourself, then call someone trusted and keep them on the phone. Who can you contact right now?';
     }
 
     if (previous.includes('sleep, appetite, studies, or daily routine')) {
-      return 'That helps me understand the impact better. When mood and energy starts affecting routine, it deserves attention. Which part has changed the most: sleep, appetite, studies, or routine?';
+      return 'Yeah. When mood and energy start touching daily routine, it stops being a small thing. Which part has changed the most: sleep, appetite, studies, or routine?';
     }
 
     if (previous.includes('panic wave')) {
       return 'That sounds like it is rising sharply right now. Keep your body still for a few seconds and name where you are. Is there any immediate physical danger around you?';
     }
+
+    if (previous.includes('emotionally alone') || previous.includes('safe person nearby')) {
+      return 'Yeah. That kind of alone can be hard to explain to people, especially when you have been holding it in for a while. How long has it been feeling this way?';
+    }
   }
 
   if (PATTERNS.negative.test(normalizedMessage)) {
     if (previous.includes('thoughts of harming yourself')) {
-      return 'I am glad you answered that directly. Even if there are no self-harm thoughts, the hopeless feeling still deserves attention. What has been making that feeling strongest today?';
+      return 'No is important too. I will not push that further, but the hopeless feeling still deserves care.';
     }
 
     if (previous.includes('are you alone right now')) {
       return 'That is important to know. Please stay near that person or in a shared space for now. Can you tell them you are not feeling safe and need them close?';
     }
+  }
+
+  if (PATTERNS.unknown.test(normalizedMessage)) {
+    return 'I do not know is sometimes the most honest thing a person can say. You do not have to force clarity right now.';
+  }
+
+  if (PATTERNS.uncertain.test(normalizedMessage)) {
+    return 'Maybe is okay. You do not have to be sure about any of this yet.';
+  }
+
+  if (PATTERNS.oneWordFeeling.test(normalizedMessage)) {
+    if (normalizedMessage === 'tired') {
+      return 'Tired like you need sleep, or tired like something deeper than that?';
+    }
+
+    if (normalizedMessage === 'fine' || normalizedMessage === 'okay') {
+      return 'Fine can mean many things. I will not force more out of it.';
+    }
+
+    if (normalizedMessage === 'empty' || normalizedMessage === 'numb') {
+      return 'Empty has its own weight. Sometimes it says more than a long explanation.';
+    }
+
+    return `${userMessage.trim()} can be the whole story for a moment. We can stay with just that.`;
   }
 
   if (previous.includes('emotionally alone') || previous.includes('safe person nearby')) {
@@ -169,7 +257,9 @@ function getContextualResponse(userMessage, previousManasMessage, riskLevel) {
   return '';
 }
 
-function getLowResponse(userMessage, languageMode) {
+function getLowResponse(userMessage, languageMode, conversationHistory = [], context = {}) {
+  const memory = getConversationMemory(conversationHistory, context);
+
   if (languageMode === 'hindi') {
     return 'Main sun raha hoon. Jo bhi chal raha hai, use seedhe shabdon mein kehna theek hai. Aaj sabse zyada bhaari kya lag raha hai?';
   }
@@ -179,7 +269,11 @@ function getLowResponse(userMessage, languageMode) {
   }
 
   if (PATTERNS.academic.test(userMessage)) {
-    return 'My friend, one result or one difficult phase does not define the whole story of your life. But I understand that it can feel very heavy right now. What is hurting more today - fear of failure, pressure from others, or disappointment in yourself?';
+    return 'One result or one difficult phase does not define the whole story of your life. Still, I can hear how heavy it feels right now. What is hurting more today - fear of failure, pressure from others, or disappointment in yourself?';
+  }
+
+  if (memory.sleep && memory.loneliness) {
+    return 'The not sleeping and feeling alone together can make the day feel unreal. Do those two feel connected for you?';
   }
 
   if (PATTERNS.lowMood.test(userMessage)) {
@@ -190,18 +284,31 @@ function getLowResponse(userMessage, languageMode) {
     ]);
   }
 
-  return pick(userMessage, [
+  return pick(`${userMessage}-${conversationHistory.length}`, [
     'I am listening. It feels like something has been building inside you for a while. What part of this has felt the heaviest today?',
-    'Thank you for putting that here. We can take one piece at a time. What feels most important for me to understand first?',
+    'You put that down in very few words, but it still has weight. What feels most important for me to know first?',
     'I may not have enough context yet, but I am here with you. What are you hoping Manas should help you think through right now?',
   ]);
 }
 
-function getModerateResponse(userMessage, context) {
+function getModerateResponse(userMessage, context, conversationHistory = []) {
+  const memory = getConversationMemory(conversationHistory, context);
+
   if (hasEvidence(context, 'isolation') || PATTERNS.isolation.test(userMessage)) {
-    return pick(userMessage, [
+    if (memory.sleep) {
+      return 'The poor sleep and the loneliness together can make everything feel more distant. Do those feel connected for you?';
+    }
+
+    return pick(`${userMessage}-${conversationHistory.length}`, [
       'That kind of loneliness can become very heavy, especially when everything stays inside. I am here with you in this moment. When you say there is no one to share with, do you mean you feel emotionally alone, or that there is no safe person nearby right now?',
       'Not having someone to share with can make the weight feel bigger than it already is. I am glad you said it here. Is there one person who feels even slightly safer than the others?',
+    ]);
+  }
+
+  if (hasEvidence(context, 'loss_of_interest') || PATTERNS.anhedonia.test(userMessage)) {
+    return pick(`${userMessage}-${conversationHistory.length}`, [
+      'Losing interest in things that used to matter can feel like a quiet kind of grief. When did you last feel even a little like yourself?',
+      'That empty feeling, where nothing really pulls you toward it, can be deeply tiring. Does it feel numb, sad, or more like everything is far away?',
     ]);
   }
 
@@ -210,8 +317,9 @@ function getModerateResponse(userMessage, context) {
   }
 
   if (hasEvidence(context, 'fatigue') || hasEvidence(context, 'sleep_disturbance') || PATTERNS.sleep.test(userMessage)) {
-    return pick(userMessage, [
-      'That sounds exhausting - like you have been trying to keep going while carrying something heavy inside. I am glad you said it here. Has this started affecting your sleep, appetite, studies, or daily routine?',
+    return pick(`${userMessage}-${conversationHistory.length}`, [
+      'Weeks of not sleeping - that is its own kind of exhaustion. What does a normal day look like for you right now?',
+      'That sounds exhausting - like you have been trying to keep going while carrying something heavy inside. Has this started affecting your sleep, appetite, studies, or daily routine?',
       'When tiredness and low mood start showing up together, it can make the whole day feel harder. I am glad you named it. Has this been going on for days, weeks, or longer?',
     ]);
   }
@@ -227,19 +335,38 @@ function getModerateResponse(userMessage, context) {
   return 'I can hear that this is affecting more than just one moment. It is okay to say it plainly here. Has this started affecting your sleep, appetite, routine, studies, work, or support around you?';
 }
 
-function getHighResponse(userMessage, context) {
+function getHighResponse(userMessage, context, conversationHistory = []) {
   if (PATTERNS.crisis.test(userMessage) || context.riskLevel === 'CRITICAL' || context.escalationLocked) {
     return CRISIS_RESPONSE;
   }
 
-  return pick(userMessage, [
-    'My friend, I am really sorry it has reached a point where you are seeing yourself this way. Your pain matters even if your mind is telling you that you do not. Have you had thoughts of harming yourself?',
+  const memory = getConversationMemory(conversationHistory, context);
+
+  if (/\bdo not see the point\b|\bdon't see the point\b|\bnothing matters\b|\bno point anymore\b/i.test(userMessage)) {
+    return 'That feeling of not seeing the point can become a very dark place to sit alone with. Have thoughts of harming yourself come up?';
+  }
+
+  if (memory.sleep || memory.loneliness || memory.anhedonia) {
+    const earlierSignals = [
+      memory.sleep ? 'the not sleeping' : '',
+      memory.anhedonia ? 'the emptiness' : '',
+      memory.loneliness ? 'the loneliness' : '',
+    ].filter(Boolean);
+    const earlierSignalText = earlierSignals.length > 1
+      ? `${earlierSignals.slice(0, -1).join(', ')} and ${earlierSignals[earlierSignals.length - 1]}`
+      : earlierSignals[0];
+
+    return `With ${earlierSignalText} already in the room, hearing you call yourself a burden matters. Have thoughts of harming yourself come up?`;
+  }
+
+  return pick(`${userMessage}-${conversationHistory.length}`, [
+    'I am really sorry it has reached a point where you are seeing yourself this way. Your pain matters even if your mind is telling you that you do not. Have you had thoughts of harming yourself?',
     'I am taking that seriously. Feeling hopeless or worthless can become very heavy when it stays inside. Have thoughts of hurting yourself come up at any point?',
     'I am glad you said this instead of carrying it silently. I do not want to give you empty motivation here. Have you had thoughts of harming yourself?',
   ]);
 }
 
-function buildFallback({ mode, riskLevel, userMessage, context, languageMode }) {
+function buildFallback({ mode, riskLevel, userMessage, context, languageMode, conversationHistory }) {
   if (riskLevel === 'CRITICAL' || context.escalationLocked) {
     return {
       text: CRISIS_RESPONSE,
@@ -250,7 +377,7 @@ function buildFallback({ mode, riskLevel, userMessage, context, languageMode }) 
 
   if (riskLevel === 'HIGH') {
     return {
-      text: getHighResponse(userMessage, context),
+      text: getHighResponse(userMessage, context, conversationHistory),
       mode: SUNNA_MODES.SAFETY_LOCKED,
       responseType: RESPONSE_TYPES.SELF_HARM_CHECK,
     };
@@ -258,14 +385,14 @@ function buildFallback({ mode, riskLevel, userMessage, context, languageMode }) 
 
   if (mode === SUNNA_MODES.GUIDED_TRIAGE) {
     return {
-      text: getModerateResponse(userMessage, context),
+      text: getModerateResponse(userMessage, context, conversationHistory),
       mode,
       responseType: RESPONSE_TYPES.TRIAGE_QUESTION,
     };
   }
 
   return {
-    text: getLowResponse(userMessage, languageMode),
+    text: getLowResponse(userMessage, languageMode, conversationHistory, context),
     mode,
     responseType: RESPONSE_TYPES.EMOTIONAL_SUPPORT,
   };
@@ -278,6 +405,15 @@ function validateSunnaResponse(text, { riskLevel, responseType }) {
     /everything will be okay/i,
     /just be positive/i,
     /think about your parents/i,
+    /absolutely/i,
+    /certainly/i,
+    /of course/i,
+    /i understand/i,
+    /that must be hard/i,
+    /i am sorry to hear that/i,
+    /thank you for sharing/i,
+    /i am here to support you/i,
+    /difficult time/i,
     /you have depression/i,
     /you are diagnosed/i,
     /i am a therapist/i,
@@ -304,7 +440,7 @@ function validateSunnaResponse(text, { riskLevel, responseType }) {
     return normalizedText.includes('harm') || normalizedText.includes('hurt');
   }
 
-  return questionCount === 1;
+  return questionCount <= 1;
 }
 
 function getGuardedSunnaResponse(userMessage, conversationHistory = [], context = {}) {
@@ -316,7 +452,7 @@ function getGuardedSunnaResponse(userMessage, conversationHistory = [], context 
   const contextualText = getContextualResponse(userMessage, previousManasMessage, riskLevel);
   const generated = contextualText
     ? { text: contextualText, mode, responseType }
-    : buildFallback({ mode, riskLevel, userMessage, context, languageMode });
+    : buildFallback({ mode, riskLevel, userMessage, context, languageMode, conversationHistory });
   const safetyPassed = validateSunnaResponse(generated.text, {
     riskLevel,
     responseType: generated.responseType,
@@ -329,7 +465,7 @@ function getGuardedSunnaResponse(userMessage, conversationHistory = [], context 
     };
   }
 
-  const fallback = buildFallback({ mode, riskLevel, userMessage, context, languageMode });
+  const fallback = buildFallback({ mode, riskLevel, userMessage, context, languageMode, conversationHistory });
 
   return {
     ...fallback,
