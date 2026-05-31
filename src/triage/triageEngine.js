@@ -27,7 +27,7 @@ const EVIDENCE_RULES = [
     category: 'low_mood',
     label: 'Low mood',
     phq: 1,
-    patterns: [/\blow\b/i, /\bsad\b/i, /\bdown\b/i, /\bdepressed\b/i, /\bnot okay\b/i],
+    patterns: [/\blow\b/i, /\bsad\b/i, /\bdown\b/i, /\bdepressed\b/i, /\bnot okay\b/i, /\bempty\b/i, /\bnumb\b/i],
   },
   {
     category: 'fatigue',
@@ -39,13 +39,40 @@ const EVIDENCE_RULES = [
     category: 'sleep_disturbance',
     label: 'Sleep disturbance',
     phq: 2,
-    patterns: [/\bsleep\b/i, /\bslept\b/i, /\bnot slept\b/i, /\bcan't sleep\b/i, /\bcannot sleep\b/i, /\binsomnia\b/i],
+    patterns: [
+      /\bsleep\b/i,
+      /\bsleeping\b/i,
+      /\bslept\b/i,
+      /\bnot slept\b/i,
+      /\bnot been sleeping\b/i,
+      /\bnot sleeping\b/i,
+      /\bsleeping well\b/i,
+      /\bcan't sleep\b/i,
+      /\bcannot sleep\b/i,
+      /\binsomnia\b/i,
+    ],
   },
   {
     category: 'loss_of_interest',
     label: 'Loss of interest',
     phq: 2,
-    patterns: [/\bnothing excites\b/i, /\blost interest\b/i, /\blosing interest\b/i, /\bno interest\b/i, /\bdon't enjoy\b/i, /\bcannot enjoy\b/i],
+    patterns: [
+      /\bnothing excites\b/i,
+      /\bnothing interests\b/i,
+      /\bdo not see the point\b/i,
+      /\bdon't see the point\b/i,
+      /\bdont see the point\b/i,
+      /\bdon't see the point in anything\b/i,
+      /\bnot interested\b/i,
+      /\bno longer interested\b/i,
+      /\blost interest\b/i,
+      /\blosing interest\b/i,
+      /\bno interest\b/i,
+      /\bdon't enjoy\b/i,
+      /\bcannot enjoy\b/i,
+      /\bdoesn't interest\b/i,
+      /\bdoes not interest\b/i,
+    ],
   },
   {
     category: 'appetite_change',
@@ -69,7 +96,15 @@ const EVIDENCE_RULES = [
     category: 'hopelessness',
     label: 'Hopelessness',
     phq: 3,
-    patterns: [/\bhopeless\b/i, /\bno hope\b/i, /\bnothing will change\b/i, /\bdo not see the point\b/i, /\bdon't see the point\b/i, /\bno point anymore\b/i],
+    patterns: [
+      /\bhopeless\b/i,
+      /\bno hope\b/i,
+      /\bnothing will change\b/i,
+      /\bnothing matters\b/i,
+      /\beverything feels pointless\b/i,
+      /\bpointless\b/i,
+      /\bno point anymore\b/i,
+    ],
   },
   {
     category: 'worthlessness',
@@ -121,19 +156,19 @@ const EVIDENCE_RULES = [
     category: 'anxiety',
     label: 'Anxiety',
     gad: 2,
-    patterns: [/\banxious\b/i, /\banxiety\b/i],
+    patterns: [/\banxious\b/i, /\banxiety\b/i, /\bnervous\b/i],
   },
   {
     category: 'worry',
     label: 'Worry',
     gad: 2,
-    patterns: [/\bworry\b/i, /\bworried\b/i, /\boverthinking\b/i],
+    patterns: [/\bworry\b/i, /\bworried\b/i, /\bworrying\b/i, /\boverthinking\b/i, /\bcan't stop thinking\b/i, /\bcannot stop thinking\b/i],
   },
   {
     category: 'panic',
     label: 'Panic',
     gad: 2,
-    patterns: [/\bpanic\b/i, /\bpanic attack\b/i],
+    patterns: [/\bpanic\b/i, /\bpanicking\b/i, /\bpanic attack\b/i],
   },
   {
     category: 'fear',
@@ -145,13 +180,13 @@ const EVIDENCE_RULES = [
     category: 'irritability',
     label: 'Irritability',
     gad: 1,
-    patterns: [/\birritated\b/i, /\birritable\b/i, /\bangry\b/i],
+    patterns: [/\birritated\b/i, /\birritable\b/i, /\bangry\b/i, /\bannoyed\b/i],
   },
   {
     category: 'loss_of_control',
     label: 'Loss of control',
     gad: 2,
-    patterns: [/\bout of control\b/i, /\blosing control\b/i, /\bcan't control\b/i, /\bcannot control\b/i],
+    patterns: [/\bout of control\b/i, /\boverwhelmed\b/i, /\blosing control\b/i, /\bcan't control\b/i, /\bcannot control\b/i, /\bon edge\b/i, /\btense\b/i, /\brestless\b/i],
   },
 ];
 
@@ -312,10 +347,20 @@ function createCounsellorBrief({
     riskAfterMessage: item.riskAfterMessage,
     routeAfterMessage: item.routeAfterMessage,
   }));
-  const conversationSummary = conversationTimeline.slice(-4).map((item) => {
-    const evidenceText = item.detectedEvidence.join(', ') || 'no new signal';
-    return `Message ${item.step}: ${evidenceText}; risk ${item.riskAfterMessage}; route ${item.routeAfterMessage}.`;
-  });
+  const firstTimelineItem = conversationTimeline[0];
+  const latestTimelineItem = conversationTimeline[conversationTimeline.length - 1];
+  const middleTimelineItems = conversationTimeline.slice(1, -1);
+  const conversationSummary = [
+    firstTimelineItem
+      ? `Initial signal: ${firstTimelineItem.detectedEvidence.join(', ') || 'no clear risk signal'}; route ${firstTimelineItem.routeAfterMessage}.`
+      : 'Initial signal: no user message captured yet.',
+    middleTimelineItems.length
+      ? `Progression: ${middleTimelineItems.flatMap((item) => item.detectedEvidence).filter(Boolean).join(', ') || 'risk context continued'} across follow-up messages.`
+      : `Progression: ${firstTimelineItem?.riskAfterMessage || riskLevel} risk context remained under monitoring.`,
+    latestTimelineItem
+      ? `Current handoff: ${latestTimelineItem.detectedEvidence.join(', ') || 'no new signal'}; risk ${latestTimelineItem.riskAfterMessage}; route ${latestTimelineItem.routeAfterMessage}.`
+      : `Current handoff: risk ${riskLevel}; route ${route}.`,
+  ];
   const hasCriticalIntent = keySignals.includes('Suicidal intent');
   const handoffSummary = hasCriticalIntent
     ? 'The user first reported low mood and tiredness, then described isolation. They later expressed hopelessness and worthlessness. The latest message included explicit suicidal intent.'

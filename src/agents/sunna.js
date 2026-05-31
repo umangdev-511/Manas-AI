@@ -45,7 +45,7 @@ Bad response examples:
 - "It sounds like you are going through a difficult time."
 `;
 
-const CRISIS_RESPONSE = 'I am really concerned about your safety right now, and this moment is urgent. I am glad you told me instead of carrying this alone. We do not need to solve everything - we only need to keep you safe. Please move away from anything you could use to hurt yourself and try to stay near another person if possible. Are you alone right now?';
+const CRISIS_RESPONSE = 'I am really concerned about your safety right now, and this moment is urgent; I am glad you told me instead of carrying this alone. We do not need to solve everything - we only need to keep you safe for this next minute. Please move away from anything you could use to hurt yourself and try to stay near another person if possible; are you alone right now?';
 
 const PATTERNS = {
   crisis: /(suicide|suicidal|want to die|end my life|kill myself|don't want to live|no point living|can't go on|better off dead)/i,
@@ -54,12 +54,12 @@ const PATTERNS = {
   eating: /(can't eat|cannot eat|not able to eat|unable to eat|no appetite|haven't eaten|have not eaten|not eating)/i,
   illness: /(sick|unwell|ill|fever|body pain|not feeling well|physically)/i,
   sleep: /(can't sleep|cannot sleep|not slept|slept|insomnia|sleep|tired|tiring|exhausted|no energy|fatigue|drained)/i,
-  anhedonia: /(empty|nothing excites|lost interest|losing interest|no interest|don't enjoy|cannot enjoy|feel like myself)/i,
+  anhedonia: /(nothing interests|nothing excites|lost interest|losing interest|no interest|don't enjoy|cannot enjoy|feel like myself)/i,
   anxiety: /(anxious|anxiety|worried|worry|nervous|panic|panicking|out of control|overwhelmed|scared|fear)/i,
   academic: /(exam|marks|result|fail|failed|study|studies|college|school|career|placement|rank)/i,
   isolation: /(alone|lonely|isolated|no one|withdrawn|no one to share)/i,
   hopeless: /(hopeless|worthless|useless|no hope|nothing matters|burden|failure|do not see the point|don't see the point|no point anymore)/i,
-  lowMood: /(low|sad|down|depressed|not okay)/i,
+  lowMood: /(low|sad|down|depressed|not okay|empty|numb)/i,
   affirmative: /^(yes|yeah|yep|haan|ha|ok|okay|i have|i do)$/i,
   negative: /^(no|nope|not really|i don't|i do not)$/i,
   uncertain: /^(maybe|kind of|i guess|a little|sort of)$/i,
@@ -111,6 +111,10 @@ function hasEvidence(context, category) {
   return getEvidenceCategories(context.detectedEvidence).includes(category);
 }
 
+function hasCurrentEvidence(context, category) {
+  return getEvidenceCategories(context.currentEvidence).includes(category);
+}
+
 function getUserMessages(conversationHistory) {
   return conversationHistory.filter((message) => message.role === 'user').map((message) => message.content);
 }
@@ -152,6 +156,11 @@ function inferRiskLevel(userMessage, context = {}) {
     || hasEvidence(context, 'fatigue')
     || hasEvidence(context, 'sleep_disturbance')
     || hasEvidence(context, 'loss_of_interest')
+    || hasEvidence(context, 'anxiety')
+    || hasEvidence(context, 'worry')
+    || hasEvidence(context, 'panic')
+    || hasEvidence(context, 'fear')
+    || hasEvidence(context, 'loss_of_control')
     || PATTERNS.isolation.test(userMessage)
     || PATTERNS.sleep.test(userMessage)
     || PATTERNS.anhedonia.test(userMessage)
@@ -208,11 +217,17 @@ function getContextualResponse(userMessage, previousManasMessage, riskLevel) {
     }
 
     if (previous.includes('are you alone right now')) {
-      return 'That is important to know. Please stay near that person or in a shared space for now. Can you tell them you are not feeling safe and need them close?';
+      return 'That is important to know. Please stay near that person or in a shared space for now.';
     }
+
+    return 'No is okay. We can leave it there for a moment.';
   }
 
   if (PATTERNS.unknown.test(normalizedMessage)) {
+    if (riskLevel === 'HIGH') {
+      return 'Not knowing is okay; sometimes the mind goes blank when pain gets too heavy. I still want to stay careful with any thought of harm.';
+    }
+
     return 'I do not know is sometimes the most honest thing a person can say. You do not have to force clarity right now.';
   }
 
@@ -276,6 +291,10 @@ function getLowResponse(userMessage, languageMode, conversationHistory = [], con
     return 'The not sleeping and feeling alone together can make the day feel unreal. Do those two feel connected for you?';
   }
 
+  if (/\bempty\b|\bnumb\b/i.test(userMessage)) {
+    return 'Empty can feel quiet from the outside and heavy from the inside. When did that empty feeling start showing up?';
+  }
+
   if (PATTERNS.lowMood.test(userMessage)) {
     return pick(userMessage, [
       'That sounds heavy - like you have been moving through the day with less strength than usual. I am glad you said it here. What has felt most difficult to carry today?',
@@ -294,7 +313,7 @@ function getLowResponse(userMessage, languageMode, conversationHistory = [], con
 function getModerateResponse(userMessage, context, conversationHistory = []) {
   const memory = getConversationMemory(conversationHistory, context);
 
-  if (hasEvidence(context, 'isolation') || PATTERNS.isolation.test(userMessage)) {
+  if (hasCurrentEvidence(context, 'isolation') || PATTERNS.isolation.test(userMessage)) {
     if (memory.sleep) {
       return 'The poor sleep and the loneliness together can make everything feel more distant. Do those feel connected for you?';
     }
@@ -305,18 +324,30 @@ function getModerateResponse(userMessage, context, conversationHistory = []) {
     ]);
   }
 
-  if (hasEvidence(context, 'loss_of_interest') || PATTERNS.anhedonia.test(userMessage)) {
+  if (hasCurrentEvidence(context, 'loss_of_interest') || PATTERNS.anhedonia.test(userMessage)) {
     return pick(`${userMessage}-${conversationHistory.length}`, [
       'Losing interest in things that used to matter can feel like a quiet kind of grief. When did you last feel even a little like yourself?',
       'That empty feeling, where nothing really pulls you toward it, can be deeply tiring. Does it feel numb, sad, or more like everything is far away?',
     ]);
   }
 
-  if (hasEvidence(context, 'anxiety') || hasEvidence(context, 'worry') || hasEvidence(context, 'panic') || PATTERNS.anxiety.test(userMessage)) {
+  if (hasCurrentEvidence(context, 'worry') || /\bworry|\bworried|\bworrying|\bcan't stop thinking|\bcannot stop thinking/i.test(userMessage)) {
+    return 'The worrying sounds like it is taking up too much room in your head. Does it come in waves, or is it there almost all day?';
+  }
+
+  if (hasCurrentEvidence(context, 'loss_of_control') || /\bout of control|\boverwhelmed|\blosing control|\bcan't control|\bcannot control/i.test(userMessage)) {
+    return 'Feeling out of control can make even small things feel unsafe. Is there something specific that seems to trigger that feeling?';
+  }
+
+  if (hasCurrentEvidence(context, 'fear') || /\bafraid|\bfear|\bscared/i.test(userMessage)) {
+    return 'Being scared all the time can keep your body on alert even when you are trying to rest. Is the fear tied to one situation, or does it follow you everywhere?';
+  }
+
+  if (hasCurrentEvidence(context, 'anxiety') || hasCurrentEvidence(context, 'panic') || PATTERNS.anxiety.test(userMessage)) {
     return 'That sounds frightening - like your body is sounding an alarm and you are trying hard to stay in control. Are you in immediate physical danger, or does this feel like a panic wave rising right now?';
   }
 
-  if (hasEvidence(context, 'fatigue') || hasEvidence(context, 'sleep_disturbance') || PATTERNS.sleep.test(userMessage)) {
+  if (hasCurrentEvidence(context, 'fatigue') || hasCurrentEvidence(context, 'sleep_disturbance') || PATTERNS.sleep.test(userMessage)) {
     return pick(`${userMessage}-${conversationHistory.length}`, [
       'Weeks of not sleeping - that is its own kind of exhaustion. What does a normal day look like for you right now?',
       'That sounds exhausting - like you have been trying to keep going while carrying something heavy inside. Has this started affecting your sleep, appetite, studies, or daily routine?',
@@ -346,17 +377,29 @@ function getHighResponse(userMessage, context, conversationHistory = []) {
     return 'That feeling of not seeing the point can become a very dark place to sit alone with. Have thoughts of harming yourself come up?';
   }
 
+  if (/\bburden\b|\bworthless\b|\buseless\b/i.test(userMessage)) {
+    return 'Hearing you describe yourself that way worries me, because that kind of self-blame can get dangerous when it stays private. Have thoughts of harming yourself come up?';
+  }
+
+  if (hasCurrentEvidence(context, 'loss_of_interest') || PATTERNS.anhedonia.test(userMessage)) {
+    if (memory.sleep) {
+      return 'The not sleeping and now losing interest are stacking up in a serious way. Have thoughts of harming yourself come up?';
+    }
+
+    return 'Losing interest in everything can make life feel strangely distant. Have thoughts of harming yourself come up?';
+  }
+
   if (memory.sleep || memory.loneliness || memory.anhedonia) {
     const earlierSignals = [
       memory.sleep ? 'the not sleeping' : '',
-      memory.anhedonia ? 'the emptiness' : '',
+      memory.anhedonia ? 'the loss of interest' : '',
       memory.loneliness ? 'the loneliness' : '',
     ].filter(Boolean);
     const earlierSignalText = earlierSignals.length > 1
       ? `${earlierSignals.slice(0, -1).join(', ')} and ${earlierSignals[earlierSignals.length - 1]}`
       : earlierSignals[0];
 
-    return `With ${earlierSignalText} already in the room, hearing you call yourself a burden matters. Have thoughts of harming yourself come up?`;
+    return `With ${earlierSignalText} already in the room, this loss of interest matters. Have thoughts of harming yourself come up?`;
   }
 
   return pick(`${userMessage}-${conversationHistory.length}`, [

@@ -29,6 +29,5 @@ function createDeterministicBrief({
 }
 
 export async function generateCounsellorBrief(input) {
-  console.log('[Setu] Deterministic counsellor brief generated');
   return createDeterministicBrief(input);
 }

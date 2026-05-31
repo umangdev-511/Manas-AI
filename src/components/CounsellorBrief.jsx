@@ -48,6 +48,7 @@ export default function CounsellorBrief({ brief = {} }) {
     keySignals = brief.keyTriggers || [],
     conversationTimeline = [],
     conversationSummary = [],
+    recommendedOpener = '',
     suggestedFirstQuestions = [],
     recommendedImmediateAction = '',
     whatNotToDo = [],
@@ -72,6 +73,9 @@ export default function CounsellorBrief({ brief = {} }) {
     `Key signals: ${keySignals.join(', ')}`,
     'Timeline:',
     ...timelineItems.map((item) => `- ${item}`),
+    'Conversation summary:',
+    ...conversationSummary.slice(0, 3).map((item) => `- ${item}`),
+    recommendedOpener && `Recommended opener: ${recommendedOpener}`,
     'Suggested first questions:',
     ...suggestedFirstQuestions.map((item, index) => `${index + 1}. ${item}`),
     `Recommended immediate action: ${recommendedImmediateAction}`,
@@ -88,6 +92,8 @@ export default function CounsellorBrief({ brief = {} }) {
     gad7Score,
     keySignals,
     timelineItems,
+    conversationSummary,
+    recommendedOpener,
     suggestedFirstQuestions,
     recommendedImmediateAction,
     whatNotToDo,
@@ -174,9 +180,18 @@ export default function CounsellorBrief({ brief = {} }) {
         </div>
       )}
 
+      <ListBlock title="Conversation Summary" items={conversationSummary.slice(0, 3)} />
+
+      {recommendedOpener && (
+        <div className="brief-block">
+          <h4>Recommended Opener</h4>
+          <blockquote>{recommendedOpener}</blockquote>
+        </div>
+      )}
+
       {handoffSummary && (
         <div className="brief-block">
-          <h4>Conversation Summary</h4>
+          <h4>Handoff Summary</h4>
           <p className="handoff-summary">{handoffSummary}</p>
         </div>
       )}
