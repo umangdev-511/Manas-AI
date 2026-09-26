@@ -7,6 +7,11 @@ import AgentDashboard from './components/AgentDashboard.jsx';
 
 import { getSunnaResponse } from './agents/sunna.js';
 import {
+  generateContextualReply,
+  translateForSafetyAnalysis,
+  translateReply,
+} from './services/sarvamVoice.js';
+import {
   analyzeMessage,
   getInitialTriageState,
   resetTriageState,
@@ -42,12 +47,6 @@ function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function wait(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
 function getLastManasMessage(messages) {
   return [...messages].reverse().find((message) => message.role === 'manas')?.content || '';
 }
@@ -64,6 +63,8 @@ export default function App() {
   const [sessionResetKey, setSessionResetKey] = useState(0);
   const [isJudgeDemoMode, setIsJudgeDemoMode] = useState(false);
   const [judgeDemoStepIndex, setJudgeDemoStepIndex] = useState(0);
+  const [voiceReplyRequest, setVoiceReplyRequest] = useState(null);
+  const [showInsights, setShowInsights] = useState(false);
 
   const addActivity = (event) => {
     setActivityLog((currentLog) => [
@@ -104,6 +105,8 @@ export default function App() {
     setConversationError('');
     setIsJudgeDemoMode(false);
     setJudgeDemoStepIndex(0);
+    setVoiceReplyRequest(null);
+    setShowInsights(false);
     setSessionResetKey((currentKey) => currentKey + 1);
   };
 
@@ -118,6 +121,7 @@ export default function App() {
   const handleEnterJudgeDemo = () => {
     setShowLanding(false);
     setIsJudgeDemoMode(true);
+    setShowInsights(true);
   };
 
   const updatePortalCase = (updater) => {
@@ -163,7 +167,7 @@ export default function App() {
     handleSendMessage(step.message);
   };
 
-  const handleSendMessage = async (messageText) => {
+  const handleSendMessage = async (messageText, options = {}) => {
     const userMessage = {
       id: createId('user'),
       role: 'user',
@@ -176,11 +180,26 @@ export default function App() {
     setIsSunnaLoading(true);
     setConversationError('');
 
+    let analysisMessageText = messageText;
+    if (options.languageCode && options.languageCode !== 'en-IN') {
+      try {
+        analysisMessageText = await translateForSafetyAnalysis(messageText);
+      } catch (translationError) {
+        setConversationError('Manas could not translate this message for its safety check. Please use the human-support option if you may be in immediate danger.');
+        addActivity({
+          agent: 'Samajhna',
+          action: 'Multilingual safety translation unavailable',
+          detail: translationError.message,
+          severity: 'watch',
+        });
+      }
+    }
+
     // Samajhna runs immediately and independently from Sunna's response cycle.
     setAgentStatus('samajhna', 'SCORING');
 
     const previousTriageState = triageState;
-    const nextTriageState = analyzeMessage(messageText, previousTriageState, {
+    const nextTriageState = analyzeMessage(analysisMessageText, previousTriageState, {
       previousAssistantMessage: getLastManasMessage(messages),
     });
     setTriageState(nextTriageState);
@@ -194,8 +213,7 @@ export default function App() {
       severity: nextTriageState.riskLevel === 'CRITICAL' ? 'critical' : nextTriageState.riskLevel === 'HIGH' ? 'high' : 'info',
     });
 
-    const sunnaPromise = Promise.all([
-      getSunnaResponse(conversationForAgents, {
+    const sunnaPromise = getSunnaResponse(conversationForAgents, {
         detectedEvidence: nextTriageState.evidence,
         currentEvidence: nextTriageState.timeline[nextTriageState.timeline.length - 1]?.detectedEvidence.map((label) => (
           nextTriageState.evidence.find((item) => item.label === label) || { label }
@@ -203,10 +221,7 @@ export default function App() {
         riskLevel: nextTriageState.riskLevel,
         route: nextTriageState.route,
         escalationLocked: nextTriageState.escalationLocked,
-        languageMode: 'english',
-      }),
-      wait(650),
-    ]).then(([responseText]) => responseText);
+      });
 
     setAgentStatus('samajhna', 'COMPLETE');
 
@@ -233,14 +248,46 @@ export default function App() {
       if (sunnaResult.usedFallback && sunnaResult.errorMessage) {
         setConversationError(`${sunnaResult.errorMessage} Manas used a safe backup response so the session can continue.`);
       }
+      let replyContent = sunnaResult.content;
+      if (!['HIGH', 'CRITICAL'].includes(nextTriageState.riskLevel) && !nextTriageState.escalationLocked) {
+        try {
+          replyContent = await generateContextualReply({
+            messages: conversationForAgents,
+            riskLevel: nextTriageState.riskLevel,
+            route: nextTriageState.route,
+            escalationLocked: nextTriageState.escalationLocked,
+            evidence: nextTriageState.evidence.slice(0, 6).map((item) => item.label),
+          });
+        } catch (replyError) {
+          addActivity({
+            agent: 'Sunna',
+            action: 'Guarded fallback used',
+            detail: replyError.message,
+            severity: 'watch',
+          });
+        }
+      }
+      if (options.languageCode && options.languageCode !== 'en-IN') {
+        try {
+          replyContent = await translateReply(replyContent, options.languageCode);
+        } catch (translationError) {
+          setConversationError(`Translation failed: ${translationError.message}. Manas continued in English.`);
+        }
+      }
+
       const manasMessage = {
         id: createId('manas'),
         role: 'manas',
-        content: sunnaResult.content,
+        content: replyContent,
         timestamp: new Date(),
       };
 
       setMessages((currentMessages) => [...currentMessages, manasMessage]);
+      setVoiceReplyRequest({
+        messageId: manasMessage.id,
+        text: replyContent,
+        languageCode: options.languageCode || 'en-IN',
+      });
       setAgentStatus('sunna', 'COMPLETE');
     } catch (error) {
       const fallbackMessage = {
@@ -252,6 +299,11 @@ export default function App() {
 
       setConversationError(`Response failed: ${error.message}. Manas used a backup response so the session can continue.`);
       setMessages((currentMessages) => [...currentMessages, fallbackMessage]);
+      setVoiceReplyRequest({
+        messageId: fallbackMessage.id,
+        text: fallbackMessage.content,
+        languageCode: options.languageCode || 'en-IN',
+      });
       setAgentStatus('sunna', 'COMPLETE');
       addActivity({
         agent: 'Sunna',
@@ -277,11 +329,21 @@ export default function App() {
           onSendMessage={handleSendMessage}
           isLoading={isSunnaLoading}
           errorMessage={conversationError}
+          voiceReplyRequest={voiceReplyRequest}
+          onVoiceReplyHandled={() => setVoiceReplyRequest(null)}
+          riskLevel={triageState.riskLevel}
+          onOpenInsights={() => setShowInsights(true)}
         />
       </section>
 
-      <section className="app-shell__dashboard">
-        <AgentDashboard
+      {showInsights && (
+        <div className="insights-overlay" role="dialog" aria-modal="true" aria-label="How Manas is helping" onClick={() => setShowInsights(false)}>
+          <section className="insights-drawer" onClick={(event) => event.stopPropagation()}>
+            <div className="insights-drawer__header">
+              <div><span>Behind the conversation</span><h2>How Manas is helping</h2></div>
+              <button type="button" onClick={() => setShowInsights(false)} aria-label="Close insights">×</button>
+            </div>
+            <AgentDashboard
           agentStatuses={agentStatuses}
           phqScore={triageState.phqScore}
           gadScore={triageState.gadScore}
@@ -306,7 +368,9 @@ export default function App() {
           onDemoStepClick={handleJudgeDemoStep}
           sessionResetKey={sessionResetKey}
         />
-      </section>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

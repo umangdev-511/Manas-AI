@@ -304,9 +304,9 @@ function getLowResponse(userMessage, languageMode, conversationHistory = [], con
   }
 
   return pick(`${userMessage}-${conversationHistory.length}`, [
-    'I am listening. It feels like something has been building inside you for a while. What part of this has felt the heaviest today?',
-    'You put that down in very few words, but it still has weight. What feels most important for me to know first?',
-    'I may not have enough context yet, but I am here with you. What are you hoping Manas should help you think through right now?',
+    'Something has been building, and you do not need to untangle all of it at once. We could begin with the smallest piece that needs attention today. Which part feels most manageable to name first?',
+    'There is weight behind those few words. You might take a moment to name one thing you need right now: space, company, rest, or a plan. Which of those feels closest?',
+    'We can slow this down and work through one part at a time. It may help to choose the moment that has been repeating most in your mind. What happened around that moment?',
   ]);
 }
 

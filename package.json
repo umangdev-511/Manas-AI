@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:voice": "npx netlify dev",
     "build": "vite build",
     "preview": "vite preview"
   },

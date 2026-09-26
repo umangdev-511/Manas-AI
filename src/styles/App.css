@@ -1,45 +1,14 @@
-* {
-  box-sizing: border-box;
-}
-
-html,
-body,
-#root {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-}
-
-body {
-  min-width: 320px;
-  background: #0F1117;
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
-
-button,
-input {
-  font: inherit;
-}
-
-.app-shell {
-  display: grid;
-  grid-template-columns: minmax(390px, 43%) minmax(520px, 57%);
-  width: 100%;
-  height: 100vh;
-  overflow: hidden;
-}
-
-.app-shell__conversation,
-.app-shell__dashboard {
-  min-width: 0;
-  min-height: 0;
-}
-
-@media (max-width: 900px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-    height: auto;
-    min-height: 100vh;
-    overflow: visible;
-  }
-}
+* { box-sizing:border-box; }
+html,body,#root { width:100%; height:100%; margin:0; }
+body { min-width:320px; background:#f1f5f2; font-family:"DM Sans",Inter,system-ui,sans-serif; }
+button,input,select { font:inherit; }
+.app-shell { width:100%; min-height:100vh; background:radial-gradient(circle at 50% 0,#fff 0,#f1f5f2 64%); }
+.app-shell__conversation { width:100%; min-height:100vh; }
+.insights-overlay { align-items:stretch; justify-items:end; padding:0; }
+.insights-drawer { width:min(760px,94vw); height:100vh; overflow:auto; background:#0f141b; box-shadow:-24px 0 80px rgba(10,20,13,.24); }
+.insights-drawer__header { position:sticky; top:0; z-index:5; display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 22px; border-bottom:1px solid #2b3442; background:#0f141b; color:white; }
+.insights-drawer__header span { color:#8fa2bd; font-size:10px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+.insights-drawer__header h2 { margin:4px 0 0; font-size:20px; }
+.insights-drawer__header button { width:38px; height:38px; border:1px solid #334052; border-radius:50%; background:#19212c; color:white; font-size:24px; cursor:pointer; }
+.insights-drawer .agent-dashboard { min-height:calc(100vh - 76px); }
+@media(max-width:700px){.insights-drawer{width:100vw}.insights-drawer__header{padding:14px 16px}}
