@@ -72,6 +72,8 @@ The Sarvam API key stays inside a Netlify Function and is never shipped to the b
 
 ## Five-minute judge demo
 
+For a broader project story, including the build narrative, website walkthrough, stack explanation, safety boundaries, and positioning beyond the competition, see the [Manas project storyboard](STORYBOARD.md).
+
 1. Open the **[live app](https://manas-ai-sarvam.netlify.app)** and choose **Voice**.
 2. Say: “I keep opening my assignment and closing it. I feel frozen.”
 3. Show the specific next action and the automatic spoken reply.
